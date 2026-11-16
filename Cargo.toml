@@ -1,0 +1,26 @@
+[package]
+name = "imomoe-sounds"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.99"
+license = "AGPL-3.0-or-later"
+description = "Configurable CS2 announcements and per-player sound preferences plugin for Plugify"
+authors = ["Mai Ooizumi <https://github.com/Mai-Ooizumi>"]
+repository = "https://github.com/Imomoe-Community/Imomoe-Sounds"
+readme = "README.md"
+keywords = ["cs2", "plugify", "counter-strike-2", "sounds", "s2sdk"]
+categories = ["games"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+plugify = { git = "https://github.com/untrustedmodders/rust-plugify", rev = "5f7d5f4f2821dd3e47a4254d2bfe1db6ec08c9aa" }
+serde = { version = "1", features = ["derive"] }
+jsonc-parser = { version = "0.34", features = ["serde"] }
+serde_json = "1"
+tempfile = "3"
+rand = { version = "=0.10.3", default-features = false, features = ["std", "std_rng", "sys_rng"] }
+
+[profile.release]
+panic = "unwind"

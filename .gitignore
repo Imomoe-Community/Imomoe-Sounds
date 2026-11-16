@@ -1,0 +1,44 @@
+# Build and packaging artifacts
+/target/
+/.work/
+/.tmp/
+/dist/
+/local/
+
+# Runtime configuration and state (keep examples and schemas tracked)
+/configs/imomoe_sounds/sounds.jsonc
+/configs/imomoe_sounds/player_preferences.json
+
+# Patches and local tooling
+*.patch
+/integrations/
+/tools/
+/workshop/
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Editor and IDE directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating system artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and crash dumps
+*.log
+*.dmp
+*.mdmp
+*.core
+
+# Sensitive runtime configurations and secrets
+.env
+.env.*
+!.env.example

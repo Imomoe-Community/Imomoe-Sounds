@@ -1,0 +1,54 @@
+{
+  "$schema": "./schemas/sounds.schema.json",
+  // Copy this file to sounds.jsonc in Plugify's configs/imomoe_sounds/ directory (keep schemas/).
+  // Replace 1234567890 with your published Steam Workshop item ID and add it to the server's s2_extra_addons.
+  "enabled_by_default": true,
+  "shutdown_min_streak": 3,
+  "chat_prefix_marker": "<prefix>",
+  "workshop": {
+    "id": 1234567890,
+    "events": "soundevents/soundevents_addon.vsndevts",
+    "resources": {
+      "Imomoe.kill_a": "sounds/imomoe/kill_a.vsnd",
+      "Imomoe.kill_b": "sounds/imomoe/kill_b.vsnd",
+      "Imomoe.headshot": "sounds/imomoe/headshot.vsnd",
+      "Imomoe.knife": "sounds/imomoe/knife.vsnd",
+      "Imomoe.streak": "sounds/imomoe/streak.vsnd",
+      "Imomoe.mvp": "sounds/imomoe/mvp.vsnd",
+      "Imomoe.round_start": "sounds/imomoe/round_start.vsnd",
+      "Imomoe.round_end": "sounds/imomoe/round_end.vsnd"
+    }
+  },
+  "announcements": {
+    "kill": {
+      "audience": "actor",
+      "order": "sequential",
+      "clips": ["Imomoe.kill_a", "Imomoe.kill_b"]
+    },
+    "headshot": { "audience": "actor", "clips": ["Imomoe.headshot"] },
+    "streak": {
+      "3": { "audience": "actor", "clips": ["Imomoe.streak"] }
+    },
+    "mvp": { "audience": "actor", "clips": ["Imomoe.mvp"] },
+    "round_start": { "order": "random", "clips": ["Imomoe.round_start"] },
+    "round_end": { "clips": ["Imomoe.round_end"] }
+  },
+  "weapons": {
+    "knife": { "audience": "actor", "clips": ["Imomoe.knife"] },
+    "knife_t": { "audience": "actor", "clips": ["Imomoe.knife"] },
+    "bayonet": { "audience": "actor", "clips": ["Imomoe.knife"] }
+  },
+  "funrounds": {
+    "flavor": {
+      "knife_round_start": {
+        "interruptible": true,
+        "clips": ["UI.ArmsRace.BecomeMatchLeader"]
+      }
+    },
+    "tactical": {
+      "ghost_breath": { "spatial": true, "distance": 1000, "clips": ["Hostage.Breath"] },
+      "suicide_warning": { "spatial": true, "distance": 1200, "clips": ["C4.ExplodeWarning"] },
+      "suicide_explosion": { "spatial": true, "clips": ["BaseGrenade.Explode"] }
+    }
+  }
+}

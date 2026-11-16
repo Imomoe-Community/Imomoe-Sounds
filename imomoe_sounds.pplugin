@@ -1,0 +1,135 @@
+{
+  "$schema": "https://raw.githubusercontent.com/untrustedmodders/plugify/refs/tags/v3.1.0/schemas/plugin.schema.json",
+  "version": "0.2.0",
+  "name": "imomoe_sounds",
+  "description": "Configurable CS2 announcements and per-player sound preferences",
+  "author": "Mai Ooizumi",
+  "website": "https://github.com/Mai-Ooizumi",
+  "license": "AGPL-3.0-or-later",
+  "entry": "bin/imomoe_sounds",
+  "platforms": [],
+  "language": "rust",
+  "dependencies": [
+    {
+      "name": "s2sdk",
+      "constraints": ">=3.4.2"
+    },
+    { "name": "imomoe_chat_prefix", "constraints": ">=0.1.0", "optional": true }
+  ],
+  "methods": [
+    {
+      "name": "PlayCue",
+      "funcName": "PlayCue",
+      "description": "Play the configured cue to an eligible player slot on the game thread. True means an emission was requested, not client playback confirmation.",
+      "paramTypes": [
+        {
+          "name": "cue",
+          "type": "string",
+          "ref": true
+        },
+        {
+          "name": "slot",
+          "type": "int32"
+        }
+      ],
+      "retType": {
+        "type": "bool"
+      }
+    },
+    {
+      "name": "BroadcastRoundStartCue",
+      "funcName": "BroadcastRoundStartCue",
+      "description": "Emit the configured round-mode cue to all clients; when emitted, it replaces the default round-start announcement for this tick.",
+      "paramTypes": [
+        {
+          "name": "cue",
+          "type": "string",
+          "ref": true
+        }
+      ],
+      "retType": {
+        "type": "bool"
+      }
+    },
+    {
+      "name": "BroadcastCue",
+      "funcName": "BroadcastCue",
+      "description": "Emit a world cue to all clients (0) or a team (2/3), respecting preferences.",
+      "paramTypes": [
+        {
+          "name": "cue",
+          "type": "string",
+          "ref": true
+        },
+        {
+          "name": "team",
+          "type": "int32"
+        }
+      ],
+      "retType": {
+        "type": "bool"
+      }
+    },
+    {
+      "name": "PlaySpatialCue",
+      "funcName": "PlaySpatialCue",
+      "description": "Emit from a valid entity with a distance cap (0 uses cue settings). Tactical cues ignore personal preferences.",
+      "paramTypes": [
+        {
+          "name": "cue",
+          "type": "string",
+          "ref": true
+        },
+        {
+          "name": "entityHandle",
+          "type": "int32"
+        },
+        {
+          "name": "distanceCap",
+          "type": "float"
+        },
+        {
+          "name": "tactical",
+          "type": "bool"
+        }
+      ],
+      "retType": {
+        "type": "bool"
+      }
+    },
+    {
+      "name": "StopCue",
+      "funcName": "StopCue",
+      "description": "Stop the exact selected spatial clip for this cue and entity.",
+      "paramTypes": [
+        {
+          "name": "cue",
+          "type": "string",
+          "ref": true
+        },
+        {
+          "name": "entityHandle",
+          "type": "int32"
+        }
+      ],
+      "retType": {
+        "type": "bool"
+      }
+    },
+    {
+      "name": "HasTacticalCue",
+      "funcName": "HasTacticalCue",
+      "description": "Check whether a tactical cue has a native or precached clip on the game thread.",
+      "paramTypes": [
+        {
+          "name": "cue",
+          "type": "string",
+          "ref": true
+        }
+      ],
+      "retType": {
+        "type": "bool"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.dll binary
+*.so binary
+*.zip binary
+*.png binary
+*.vsnd_c binary
+*.vsndevts_c binary

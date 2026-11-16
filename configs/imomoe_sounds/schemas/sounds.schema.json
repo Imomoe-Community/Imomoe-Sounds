@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Imomoe Sounds",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "enabled_by_default": {
+      "type": "boolean",
+      "default": true
+    },
+    "shutdown_min_streak": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3
+    },
+    "chat_prefix_marker": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$",
+      "description": "Marker used before !sound replies; omitted leaves replies unprefixed."
+    },
+    "announcements": {
+      "type": "object",
+      "properties": {
+        "streak": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/playlist"
+          }
+        },
+        "first_blood": {
+          "$ref": "#/$defs/playlist"
+        },
+        "round_start": {
+          "$ref": "#/$defs/playlist"
+        },
+        "freeze_end": {
+          "$ref": "#/$defs/playlist"
+        },
+        "round_end": {
+          "$ref": "#/$defs/playlist"
+        },
+        "round_end.ct": {
+          "$ref": "#/$defs/round_result"
+        },
+        "round_end.t": {
+          "$ref": "#/$defs/round_result"
+        },
+        "round_end.draw": {
+          "$ref": "#/$defs/round_result"
+        },
+        "join_server": {
+          "$ref": "#/$defs/playlist"
+        },
+        "kill": {
+          "$ref": "#/$defs/playlist"
+        },
+        "headshot": {
+          "$ref": "#/$defs/playlist"
+        },
+        "streak_shutdown": {
+          "$ref": "#/$defs/playlist"
+        },
+        "teamkill": {
+          "$ref": "#/$defs/playlist"
+        },
+        "suicide": {
+          "$ref": "#/$defs/playlist"
+        },
+        "mvp": {
+          "$ref": "#/$defs/playlist"
+        }
+      },
+      "propertyNames": {
+        "pattern": "^(?:[^\\s.]+|round_end\\.(?:ct|t|draw))$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/playlist"
+      }
+    },
+    "weapons": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[^\\s.]+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/playlist"
+      }
+    },
+    "funrounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "flavor": {
+          "type": "object",
+          "properties": {
+            "player_blind": { "$ref": "#/$defs/targeted_flavor" },
+            "regeneration": { "$ref": "#/$defs/targeted_flavor" },
+            "knife_round_start": { "$ref": "#/$defs/flavor" }
+          },
+          "propertyNames": {
+            "pattern": "^[^\\s.]+$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/flavor"
+          }
+        },
+        "tactical": {
+          "type": "object",
+          "properties": {
+            "ghost_breath": { "$ref": "#/$defs/tactical" },
+            "suicide_warning": { "$ref": "#/$defs/tactical" },
+            "suicide_explosion": { "$ref": "#/$defs/tactical" },
+            "chrono_teleport": { "$ref": "#/$defs/tactical" },
+            "chrono_stasis_lock": { "$ref": "#/$defs/tactical" },
+            "chrono_stasis_kill": { "$ref": "#/$defs/tactical" },
+            "grapple_attach": { "$ref": "#/$defs/tactical" },
+            "grapple_release": { "$ref": "#/$defs/tactical" },
+            "explosive_bullet": { "$ref": "#/$defs/tactical" },
+            "chicken_eat_heal": { "$ref": "#/$defs/tactical" },
+            "chicken_eat_overfull": { "$ref": "#/$defs/tactical" },
+            "chicken_eat_fatal": { "$ref": "#/$defs/tactical" },
+            "chicken_eat_switch": { "$ref": "#/$defs/tactical" },
+            "chicken_explosion": { "$ref": "#/$defs/tactical" },
+            "chicken_revenge": { "$ref": "#/$defs/tactical" },
+            "c4_revenge_spawn": { "$ref": "#/$defs/tactical" },
+            "c4_revenge_explosion": { "$ref": "#/$defs/tactical" },
+            "c4_revenge_retire": { "$ref": "#/$defs/tactical" },
+            "chicken_idle": { "$ref": "#/$defs/tactical" },
+            "chicken_panic": { "$ref": "#/$defs/tactical" }
+          },
+          "propertyNames": {
+            "pattern": "^[^\\s.]+$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/tactical"
+          }
+        }
+      }
+    },
+    "workshop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "events": {
+          "type": "string",
+          "pattern": "^soundevents/(?!.*(?:^|/)\\.{1,2}/)(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\\.vsndevts$"
+        },
+        "resources": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/event"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^sounds/(?!.*(?:^|/)\\.{1,2}/)(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\\.vsnd$"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "events",
+        "resources"
+      ]
+    }
+  },
+  "$defs": {
+    "event": {
+      "type": "string",
+      "pattern": "^\\S+$"
+    },
+    "round_result": {
+      "allOf": [
+        { "$ref": "#/$defs/playlist" },
+        { "properties": { "audience": { "const": "all" } } }
+      ],
+      "description": "Round results have no actor and use the all audience."
+    },
+    "targeted_flavor": {
+      "allOf": [
+        { "$ref": "#/$defs/flavor" },
+        { "properties": { "spatial": { "const": false } } }
+      ],
+      "description": "This cue is played directly to a player and cannot be spatial."
+    },
+    "playlist": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "enum": [
+            "sequential",
+            "random"
+          ],
+          "default": "sequential"
+        },
+        "audience": {
+          "enum": [
+            "all",
+            "actor"
+          ],
+          "default": "all"
+        },
+        "interruptible": {
+          "type": "boolean",
+          "default": false
+        },
+        "clips": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        }
+      },
+      "required": [
+        "clips"
+      ]
+    },
+    "flavor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "enum": [
+            "sequential",
+            "random"
+          ],
+          "default": "sequential"
+        },
+        "audience": {
+          "enum": [
+            "all",
+            "actor"
+          ],
+          "default": "all"
+        },
+        "interruptible": {
+          "type": "boolean",
+          "default": false
+        },
+        "clips": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        },
+        "spatial": {
+          "type": "boolean",
+          "default": false
+        },
+        "distance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "clips"
+      ],
+      "if": {
+        "required": [
+          "distance"
+        ]
+      },
+      "then": {
+        "required": [
+          "spatial"
+        ],
+        "properties": {
+          "spatial": {
+            "const": true
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "spatial"
+            ],
+            "properties": {
+              "spatial": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "audience": {
+                "const": "all"
+              },
+              "interruptible": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tactical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "enum": [
+            "sequential",
+            "random"
+          ],
+          "default": "sequential"
+        },
+        "audience": {
+          "const": "all"
+        },
+        "interruptible": {
+          "const": false
+        },
+        "clips": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        },
+        "spatial": {
+          "const": true
+        },
+        "distance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "clips",
+        "spatial"
+      ]
+    }
+  }
+}

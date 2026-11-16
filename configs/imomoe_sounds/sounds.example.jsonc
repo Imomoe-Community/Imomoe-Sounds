@@ -1,0 +1,79 @@
+{
+  "$schema": "./schemas/sounds.schema.json",
+  // Copy this file to sounds.jsonc in Plugify's configs/imomoe_sounds/ directory (keep schemas/).
+  "enabled_by_default": true,
+  "shutdown_min_streak": 3,
+  // Optional marker inserted before !sound replies when imomoe_chat_prefix is loaded; omit for unprefixed replies.
+  "chat_prefix_marker": "<prefix>",
+
+  // Uncomment and configure this section only when using a custom Workshop sound pack (also add the ID to s2_extra_addons).
+  // See sounds.workshop.example.jsonc for a complete Workshop example.
+  // "workshop": {
+  //   "id": 1234567890,
+  //   "events": "soundevents/soundevents_addon.vsndevts",
+  //   "resources": {
+  //     "Custom.Kill1": "sounds/custom/kill1.vsnd"
+  //   }
+  // },
+
+  // Default preset using CS2 built-in sound events (no Workshop dependency).
+  "announcements": {
+    "kill": {
+      "audience": "actor",
+      "order": "sequential",
+      "clips": ["UI.ArmsRace.Kill1", "UI.DeathMatchBonusKill"]
+    },
+    "headshot": { "audience": "actor", "clips": ["UI.ArmsRace.Kill1"] },
+    "streak": {
+      "3": { "audience": "actor", "clips": ["UI.ArmsRace.BecomeTeamLeader"] }
+    },
+    "mvp": { "audience": "actor", "clips": ["UI.CoinLevelUp"] },
+    "round_start": {
+      "order": "random",
+      "clips": ["UI.DeathMatchBonusAlertStart", "UI.ArmsRace.BecomeMatchLeader"]
+    },
+    "round_end": { "clips": ["UI.DeathMatchBonusAlertEnd"] },
+    "join_server": { "audience": "actor", "clips": [] }
+    // Optional outcome-specific keys: "round_end.ct", "round_end.t", "round_end.draw".
+    // Omitted outcome keys fall back to "round_end"; an empty clips array silences that outcome.
+    // A draw requires the game's Draw reason; GameStart uses the common key.
+    // Other optional cues: "first_blood", "freeze_end", "streak_shutdown", "teamkill", "suicide".
+  },
+  "weapons": {
+    "knife": { "audience": "actor", "clips": ["UI.DeathMatchBonusKill"] },
+    "knife_t": { "audience": "actor", "clips": ["UI.DeathMatchBonusKill"] },
+    "bayonet": { "audience": "actor", "clips": ["UI.DeathMatchBonusKill"] }
+  },
+  "funrounds": {
+    "flavor": {
+      "knife_round_start": {
+        "interruptible": true,
+        "clips": ["UI.CoinLevelUp"]
+      },
+      "player_blind": { "clips": [] },
+      "regeneration": { "clips": [] }
+    },
+    "tactical": {
+      "ghost_breath": { "spatial": true, "distance": 1000, "clips": ["Hostage.Breath"] },
+      "suicide_warning": { "spatial": true, "distance": 1200, "clips": ["C4.ExplodeWarning"] },
+      "suicide_explosion": { "spatial": true, "clips": ["BaseGrenade.Explode"] },
+      "chrono_teleport": { "spatial": true, "clips": [] },
+      "chrono_stasis_lock": { "spatial": true, "clips": [] },
+      "chrono_stasis_kill": { "spatial": true, "clips": [] },
+      "grapple_attach": { "spatial": true, "clips": [] },
+      "grapple_release": { "spatial": true, "clips": [] },
+      "explosive_bullet": { "spatial": true, "clips": [] },
+      "chicken_eat_heal": { "spatial": true, "clips": [] },
+      "chicken_eat_overfull": { "spatial": true, "clips": [] },
+      "chicken_eat_fatal": { "spatial": true, "clips": [] },
+      "chicken_eat_switch": { "spatial": true, "clips": [] },
+      "chicken_explosion": { "spatial": true, "clips": [] },
+      "chicken_revenge": { "spatial": true, "clips": [] },
+      "c4_revenge_spawn": { "spatial": true, "clips": [] },
+      "c4_revenge_explosion": { "spatial": true, "clips": [] },
+      "c4_revenge_retire": { "spatial": true, "clips": [] },
+      "chicken_idle": { "spatial": true, "clips": [] },
+      "chicken_panic": { "spatial": true, "clips": [] }
+    }
+  }
+}
