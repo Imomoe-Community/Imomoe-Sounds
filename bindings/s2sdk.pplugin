@@ -892,6 +892,78 @@
         "type": "bool",
         "description": "true if the client is the SourceTV bot, false otherwise."
       }
+    },
+    {
+      "name": "GetGameTime",
+      "group": "Engine",
+      "description": "Returns the game time based on the game tick.",
+      "funcName": "GetGameTime",
+      "paramTypes": [],
+      "retType": {
+        "type": "float",
+        "description": "The current game time."
+      }
+    },
+    {
+      "name": "CreateConVarBool",
+      "group": "Cvars",
+      "description": "Creates a new boolean console variable.",
+      "funcName": "CreateConVarBool",
+      "paramTypes": [
+        {
+          "name": "name",
+          "type": "string",
+          "ref": false,
+          "description": "The name of the console variable."
+        },
+        {
+          "name": "defaultValue",
+          "type": "bool",
+          "ref": false,
+          "description": "The default value for the console variable."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "ref": false,
+          "description": "A brief description of the console variable."
+        },
+        {
+          "name": "flags",
+          "type": "int64",
+          "ref": false,
+          "description": "Flags that define the behavior of the console variable.",
+          "enum": "ConVarFlag"
+        },
+        {
+          "name": "hasMin",
+          "type": "bool",
+          "ref": false,
+          "description": "Indicates if a minimum value is provided."
+        },
+        {
+          "name": "min",
+          "type": "bool",
+          "ref": false,
+          "description": "The minimum value if hasMin is true."
+        },
+        {
+          "name": "hasMax",
+          "type": "bool",
+          "ref": false,
+          "description": "Indicates if a maximum value is provided."
+        },
+        {
+          "name": "max",
+          "type": "bool",
+          "ref": false,
+          "description": "The maximum value if hasMax is true."
+        }
+      ],
+      "retType": {
+        "type": "uint64",
+        "description": "A handle to the created console variable data."
+      }
     }
   ],
   "classes": [

@@ -99,3 +99,17 @@ pub type _EmitSoundToClient = unsafe extern "C" fn(i32, &Arr<i32>, &Str, f32, f3
 #[allow(dead_code, non_upper_case_globals)]
 #[unsafe(no_mangle)]
 pub static mut __s2sdk_EmitSoundToClient: Option<_EmitSoundToClient> = None;
+
+/// Returns the game time based on the game tick.
+///
+/// # Returns - (float):
+/// The current game time.
+#[track_caller]
+#[allow(dead_code, non_snake_case)]
+pub fn GetGameTime() -> f32 {
+    unsafe { __s2sdk_GetGameTime.expect("GetGameTime function was not found")() }
+}
+pub type _GetGameTime = unsafe extern "C" fn() -> f32;
+#[allow(dead_code, non_upper_case_globals)]
+#[unsafe(no_mangle)]
+pub static mut __s2sdk_GetGameTime: Option<_GetGameTime> = None;

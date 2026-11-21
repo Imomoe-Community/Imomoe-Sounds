@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use crate::{
-    playlist::{Audience, Config, Playlist, clip_available},
+    playlist::{Audience, Config, Order, Playlist, clip_available},
     s2sdk, with_state,
 };
 use plugify::{Arr, Str, Vec3};
@@ -37,6 +37,21 @@ impl Target {
             _ => None,
         }
     }
+
+    fn cursor_scope(self) -> CursorScope {
+        match self {
+            Self::Event(Some(actor)) | Self::Client(actor) => CursorScope::Actor(actor),
+            Self::Spatial { source, .. } => CursorScope::Entity(source),
+            Self::Event(None) | Self::Team(_) => CursorScope::Global,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum CursorScope {
+    Global,
+    Actor(i32),
+    Entity(i32),
 }
 
 #[derive(Clone, Copy)]
@@ -54,7 +69,7 @@ struct Tracks {
 pub(crate) struct Playback {
     pub config: Arc<Config>,
     pub mounted: BTreeSet<String>,
-    next: HashMap<String, usize>,
+    next: HashMap<(CursorScope, String), usize>,
     rng: StdRng,
     tracks: Tracks,
 }
@@ -85,11 +100,22 @@ impl Playback {
         self.tracks = Tracks::default();
     }
 
+    pub fn forget_actor(&mut self, slot: i32) {
+        if !self.next.is_empty() {
+            self.next
+                .retain(|(scope, _), _| *scope != CursorScope::Actor(slot));
+        }
+    }
+
     pub fn forget_entity(&mut self, handle: i32) {
         if !self.tracks.entity.is_empty() {
             self.tracks
                 .entity
                 .retain(|(entity, _), _| *entity != handle);
+        }
+        if !self.next.is_empty() {
+            self.next
+                .retain(|(scope, _), _| *scope != CursorScope::Entity(handle));
         }
     }
 
@@ -107,10 +133,20 @@ impl Playback {
         list: &Playlist,
         has_recipients: bool,
         source: Option<i32>,
+        scope: CursorScope,
     ) -> (Option<String>, Option<String>) {
         let previous = source.and_then(|source| self.take_spatial(name, source));
+        let effective_scope = match list.order {
+            Order::ActorSequential => scope,
+            Order::Sequential | Order::Random => CursorScope::Global,
+        };
         let event = has_recipients.then(|| {
-            let next = self.next.entry(name.into()).or_default();
+            let mut dummy = 0;
+            let next = if list.order == Order::Random {
+                &mut dummy
+            } else {
+                self.next.entry((effective_scope, name.into())).or_default()
+            };
             list.pick(
                 self.config.workshop.as_ref(),
                 &self.mounted,
@@ -367,6 +403,7 @@ pub(crate) fn dispatch_selected<'a>(
                 list,
                 !recipients.is_empty(),
                 spatial.map(|(source, _)| source),
+                target.cursor_scope(),
             )
         })?;
         let event = finish_prepared_event(
@@ -465,7 +502,7 @@ mod tests {
             .entity
             .insert((12, name.into()), "old".into());
 
-        let prepared = playback.prepare_event(name, list, false, Some(12));
+        let prepared = playback.prepare_event(name, list, false, Some(12), CursorScope::Entity(12));
         let mut stopped = None;
         let event = finish_prepared_event(prepared, Some(12), |source, event| {
             stopped = Some((source, event.to_owned()));
@@ -473,12 +510,124 @@ mod tests {
         assert_eq!(event, None);
         assert_eq!(stopped, Some((12, "old".into())));
         assert!(!playback.tracks.entity.contains_key(&(12, name.into())));
-        assert!(!playback.next.contains_key(name));
+        assert!(
+            !playback
+                .next
+                .contains_key(&(CursorScope::Entity(12), name.into()))
+        );
 
-        let (event, previous) = playback.prepare_event(name, list, true, Some(12));
+        let (event, previous) =
+            playback.prepare_event(name, list, true, Some(12), CursorScope::Entity(12));
         assert_eq!(event.as_deref(), Some("A"));
         assert_eq!(previous, None);
-        let (event, _) = playback.prepare_event(name, list, true, Some(12));
+        let (event, _) =
+            playback.prepare_event(name, list, true, Some(12), CursorScope::Entity(12));
         assert_eq!(event.as_deref(), Some("B"));
+    }
+
+    #[test]
+    fn actor_sequential_tracks_independent_cursors_and_cleans_up_per_scope() {
+        let config = Config::parse(
+            r#"{
+                "announcements": {"kill": {"order": "actor_sequential", "clips": ["K1", "K2", "K3"]}},
+                "funrounds": {"tactical": {"breath": {"order": "actor_sequential", "spatial": true, "clips": ["B1", "B2"]}}}
+            }"#,
+        )
+        .unwrap();
+        let mut playback = Playback::new(config).unwrap();
+        let config = playback.config.clone();
+        let kill = &config.playlists["kill"];
+        let breath = &config.playlists["funrounds.tactical.breath"];
+
+        assert_eq!(
+            playback
+                .prepare_event("kill", kill, true, None, CursorScope::Actor(1))
+                .0
+                .as_deref(),
+            Some("K1")
+        );
+        assert_eq!(
+            playback
+                .prepare_event("kill", kill, true, None, CursorScope::Actor(2))
+                .0
+                .as_deref(),
+            Some("K1")
+        );
+        assert_eq!(
+            playback
+                .prepare_event("kill", kill, true, None, CursorScope::Actor(1))
+                .0
+                .as_deref(),
+            Some("K2")
+        );
+        playback.forget_actor(1);
+        assert_eq!(
+            playback
+                .prepare_event("kill", kill, true, None, CursorScope::Actor(1))
+                .0
+                .as_deref(),
+            Some("K1")
+        );
+        assert_eq!(
+            playback
+                .prepare_event("kill", kill, true, None, CursorScope::Actor(2))
+                .0
+                .as_deref(),
+            Some("K2")
+        );
+
+        assert_eq!(
+            playback
+                .prepare_event(
+                    "funrounds.tactical.breath",
+                    breath,
+                    true,
+                    Some(100),
+                    CursorScope::Entity(100)
+                )
+                .0
+                .as_deref(),
+            Some("B1")
+        );
+        assert_eq!(
+            playback
+                .prepare_event(
+                    "funrounds.tactical.breath",
+                    breath,
+                    true,
+                    Some(200),
+                    CursorScope::Entity(200)
+                )
+                .0
+                .as_deref(),
+            Some("B1")
+        );
+        playback.forget_entity(100);
+        assert_eq!(
+            playback
+                .prepare_event(
+                    "funrounds.tactical.breath",
+                    breath,
+                    true,
+                    Some(100),
+                    CursorScope::Entity(100)
+                )
+                .0
+                .as_deref(),
+            Some("B1")
+        );
+        assert_eq!(
+            playback
+                .prepare_event(
+                    "funrounds.tactical.breath",
+                    breath,
+                    true,
+                    Some(200),
+                    CursorScope::Entity(200)
+                )
+                .0
+                .as_deref(),
+            Some("B2")
+        );
     }
 }

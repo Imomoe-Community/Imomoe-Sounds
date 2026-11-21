@@ -16,6 +16,8 @@ struct ConfigFile {
     enabled_by_default: bool,
     #[serde(default = "default_shutdown")]
     shutdown_min_streak: usize,
+    #[serde(default = "default_combo_window")]
+    combo_window_seconds: f64,
     chat_prefix_marker: Option<String>,
     workshop: Option<Workshop>,
     #[serde(default)]
@@ -29,6 +31,7 @@ struct ConfigFile {
 pub(crate) struct Config {
     pub enabled_by_default: bool,
     pub shutdown_min_streak: usize,
+    pub combo_window_seconds: f64,
     pub chat_prefix_marker: Option<String>,
     pub workshop: Option<Workshop>,
     pub playlists: BTreeMap<String, Playlist>,
@@ -38,6 +41,10 @@ pub(crate) struct Config {
 struct Announcements {
     #[serde(default)]
     streak: BTreeMap<String, Playlist>,
+    #[serde(default)]
+    combo: BTreeMap<String, Playlist>,
+    #[serde(default)]
+    headshot_streak: BTreeMap<String, Playlist>,
     #[serde(flatten)]
     cues: BTreeMap<String, Playlist>,
 }
@@ -60,11 +67,12 @@ pub(crate) struct Workshop {
     pub resources: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Copy, Default, Deserialize)]
+#[derive(Clone, Copy, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Order {
     #[default]
     Sequential,
+    ActorSequential,
     Random,
 }
 
@@ -96,6 +104,9 @@ fn yes() -> bool {
 }
 fn default_shutdown() -> usize {
     3
+}
+fn default_combo_window() -> f64 {
+    2.0
 }
 
 fn valid_event(event: &str) -> bool {
@@ -137,6 +148,9 @@ impl Config {
         if raw.shutdown_min_streak == 0 {
             return Err("shutdown_min_streak must be positive".into());
         }
+        if !raw.combo_window_seconds.is_finite() || raw.combo_window_seconds < 0.0 {
+            return Err("combo_window_seconds must be finite and nonnegative".into());
+        }
         if raw
             .chat_prefix_marker
             .as_ref()
@@ -171,7 +185,8 @@ impl Config {
                         "round_end.ct" | "round_end.t" | "round_end.draw"
                     );
                 if (!cue_component(&name) && !round_result)
-                    || (prefix.is_empty() && name == "streak")
+                    || (prefix.is_empty()
+                        && matches!(name.as_str(), "streak" | "combo" | "headshot_streak"))
                 {
                     return Err(format!("{cue}: invalid cue component").into());
                 }
@@ -186,21 +201,28 @@ impl Config {
                 playlists.insert(cue, list);
             }
         }
-        for (threshold, list) in raw.announcements.streak {
-            let cue = format!("streak.{threshold}");
-            if threshold.starts_with('0')
-                || !threshold.bytes().all(|b| b.is_ascii_digit())
-                || threshold.parse::<usize>().is_err()
-            {
-                return Err(format!("{cue}: threshold must be positive").into());
+        for (threshold_prefix, thresholds) in [
+            ("streak", raw.announcements.streak),
+            ("combo", raw.announcements.combo),
+            ("headshot_streak", raw.announcements.headshot_streak),
+        ] {
+            for (threshold, list) in thresholds {
+                let cue = format!("{threshold_prefix}.{threshold}");
+                if threshold.starts_with('0')
+                    || !threshold.bytes().all(|b| b.is_ascii_digit())
+                    || threshold.parse::<usize>().is_err()
+                {
+                    return Err(format!("{cue}: threshold must be positive").into());
+                }
+                Self::validate_playlist(&cue, &list, false)?;
+                playlists.insert(cue, list);
             }
-            Self::validate_playlist(&cue, &list, false)?;
-            playlists.insert(cue, list);
         }
 
         Ok(Self {
             enabled_by_default: raw.enabled_by_default,
             shutdown_min_streak: raw.shutdown_min_streak,
+            combo_window_seconds: raw.combo_window_seconds,
             chat_prefix_marker: raw.chat_prefix_marker,
             workshop: raw.workshop,
             playlists,
@@ -262,7 +284,7 @@ impl Playlist {
             return None;
         }
         let index = match self.order {
-            Order::Sequential => {
+            Order::Sequential | Order::ActorSequential => {
                 let index = *next % count;
                 *next = (index + 1) % count;
                 index
@@ -400,5 +422,32 @@ mod tests {
                 .is_err()
         );
         assert!(Config::parse(&PACK.replace(r#""UI.ArmsRace.Kill1""#, r#""bad name""#)).is_err());
+    }
+
+    #[test]
+    fn combo_headshot_streak_and_actor_sequential_parse_and_validate() {
+        let config = Config::parse(
+            r#"{
+            "combo_window_seconds": 2.5,
+            "announcements": {
+                "kill": {"order": "actor_sequential", "clips": ["K1", "K2"]},
+                "combo": {"2": {"clips": ["C2"]}},
+                "headshot_streak": {"1": {"clips": ["HS1"]}, "2": {"clips": ["HS2"]}},
+                "headshot": {"clips": ["HSFallback"]}
+            }
+        }"#,
+        )
+        .unwrap();
+        assert_eq!(config.combo_window_seconds, 2.5);
+        assert!(config.playlists["kill"].order == Order::ActorSequential);
+        assert!(config.playlists.contains_key("combo.2"));
+        assert!(config.playlists.contains_key("headshot_streak.1"));
+        assert!(config.playlists.contains_key("headshot_streak.2"));
+        assert!(config.playlists.contains_key("headshot"));
+        assert!(Config::parse(r#"{"combo_window_seconds": -0.1}"#).is_err());
+        assert!(Config::parse(r#"{"announcements":{"combo":{"0":{"clips":[]}}}}"#).is_err());
+        assert!(
+            Config::parse(r#"{"announcements":{"headshot_streak":{"0":{"clips":[]}}}}"#).is_err()
+        );
     }
 }

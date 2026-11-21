@@ -16,6 +16,11 @@
       "minimum": 1,
       "default": 3
     },
+    "combo_window_seconds": {
+      "type": "number",
+      "minimum": 0,
+      "default": 2.0
+    },
     "chat_prefix_marker": {
       "type": "string",
       "minLength": 1,
@@ -26,6 +31,24 @@
       "type": "object",
       "properties": {
         "streak": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/playlist"
+          }
+        },
+        "combo": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/playlist"
+          }
+        },
+        "headshot_streak": {
           "type": "object",
           "propertyNames": {
             "pattern": "^[1-9][0-9]*$"
@@ -200,6 +223,7 @@
         "order": {
           "enum": [
             "sequential",
+            "actor_sequential",
             "random"
           ],
           "default": "sequential"
@@ -233,6 +257,7 @@
         "order": {
           "enum": [
             "sequential",
+            "actor_sequential",
             "random"
           ],
           "default": "sequential"
@@ -313,6 +338,7 @@
         "order": {
           "enum": [
             "sequential",
+            "actor_sequential",
             "random"
           ],
           "default": "sequential"
