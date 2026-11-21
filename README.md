@@ -37,19 +37,17 @@
 
 4. 重启服务端或按运维流程重新加载插件使其生效。
 
-> [!TIP]
-> **从 0.1.0 升级**：请将旧 `sounds.toml` 列表迁入 `sounds.jsonc`（常规列表放入 `announcements`，`streak.N` 放入 `announcements.streak.N`，武器放入 `weapons.<事件武器名>`）。Workshop 自定义资产现改用 `s2_extra_addons` 公共分发，不再使用私有分发名单或逐玩家原生回退表。详细迁移说明见 [FunRounds 联动说明](docs/FUNROUNDS_INTEGRATION.md)。
-
 ---
 
 ## 配置播放与收听
 
 配置文件支持 JSONC 注释与尾随逗号，并通过 [sounds.schema.json](configs/imomoe_sounds/schemas/sounds.schema.json) 进行严格校验（不允许未知字段）：
 
-- **播放策略**：`order` 支持 `sequential`（同图按序循环，换图复位）与 `random`（等概率独立抽取）。`clips` 可混填 CS2 内置事件与已登记的自定义 SoundEvent；省略配置项将跳过该候选，显式配置 `clips: []` 则静音。
-- **`announcements`**：配置回合、MVP 与战斗播报。击杀事件按优先级只播放一个 Cue：`first_blood` → `streak.N` / `streak_shutdown` → `weapons.<name>` → `headshot` → `kill`；非 FFA 误杀（`teamkill`）与自杀（`suicide`）独立触发。同一击杀者同一 Tick 多次敌对击杀不叠播，但仍计入连杀。
+- **播放策略**：`order` 支持 `sequential`（全服同图按序循环，换图复位）、`actor_sequential`（按触发玩家或发声实体分别按序循环，断线/销毁或换图复位）与 `random`（等概率独立抽取）。`clips` 可混填 CS2 内置事件与已登记的自定义 SoundEvent；省略配置项将跳过该候选，显式配置 `clips: []` 则静音。
+- **`announcements`**：配置回合、MVP 与战斗播报。支持通过 `combo_window_seconds`（默认 `2.0`，设 `0` 关闭）配置限时连杀 `combo.N`，以及通过 `headshot_streak.N` 配置回合内连续爆头（未命中具体次数时回退通用 `headshot` 池）。非 FFA 误杀（`teamkill`）与自杀（`suicide`）独立触发。
+- **击杀互斥开关（`imomoe_sounds_exclusive`）**：运行时 ConVar（默认 `1`）控制击杀播报是否互斥。设为 `1` 时按 `first_blood` → `combo.N` → `streak.N` → `streak_shutdown` → `weapons.<name>` → `headshot_streak.N` → `headshot` → `kill` 仅播优先级最高的一条；设为 `0` 时按维度叠加播放，且同一 Tick 同维度至多播一次；无论是否互斥，全部计数照常推进。
 - **`announcements.join_server` 与 `round_end.*`**：`join_server` 可设置 `audience` 为 `"actor"` 或 `"all"`；回合结算支持 `round_end.ct`、`round_end.t` 与 `round_end.draw`（仅无胜方且结算原因为 Draw 时触发），省略结果键时回退至公共 `round_end`，设 `clips: []` 则该结果静音。
-- **`funrounds.flavor`**：模式 BGM 等装饰音；支持 `"interruptible": true`，在下一回合 `round_prestart` 时自动停止。
+- **`funrounds.flavor`**：模式 BGM 与玩家定向效果音；普通模式 BGM 支持 `"interruptible": true`，在下一回合 `round_prestart` 时自动停止。
 - **`funrounds.tactical`**：实体空间战术提示（如幽灵呼吸、自爆警告与爆炸），按 `distance` 筛选且不受 `!sound` 个人静音影响；空间衰减由 SoundEvent 自身定义负责。
 - **`workshop`**：仅使用自定义音效时需要。填写 `id`、`events`（`.vsndevts`）与 `resources`（`.vsnd`），并将物品 ID 加入服务端 `s2_extra_addons`。详见 [Workshop 指南](docs/WORKSHOP.md)。
 

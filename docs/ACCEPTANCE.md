@@ -8,7 +8,7 @@
 
 顺序同步与个人静音隔离可用双人（A、B）配合 CT BOT 验收（BOT 可提供击杀事件，不作为收听端）：
 
-1. 基于 [默认示例配置](../configs/imomoe_sounds/sounds.example.jsonc) 部署 `sounds.jsonc`。将 `announcements.kill.audience` 设为 `"all"`，A 用 AK 身体击杀两次：A、B 每次听到同一条提示且两次按配置顺序轮换；换图后重置回第一条。改为 `"random"` 后允许连续重复。
+1. 基于 [默认示例配置](../configs/imomoe_sounds/sounds.example.jsonc) 部署 `sounds.jsonc`。将 `announcements.kill.audience` 设为 `"all"`，A 用 AK 身体击杀两次：A、B 每次听到同一条提示且两次按配置顺序轮换；换图后重置回第一条。改为 `"actor_sequential"` 时，A 与 B 各自独立按序轮换互不抢进度，断线重连后从第一条重新开始。改为 `"random"` 后允许连续重复。
 2. 将 `announcements.kill.clips` 设为单条固定音轨并关闭 `announcements.streak`，击杀 CT BOT 默认可听；输入 `!sound` 收到关闭回显后再击杀只剩枪声。
 3. 保持静音状态下依次重连、换图与正常重启服务端，击杀均应保持静音；再次输入 `!sound` 恢复播报后，`player_preferences.json` 不再保留该玩家的覆盖记录。双人测试时仅让 B 静音，A 击杀第三次应仅 A 听到播报。
 4. 触发 `BroadcastCue(cue, 2)` 并在 T → CT → T 间切换阵营：T 听到提示、CT 无声、切回 T 再次听到。让 B 切至观察者验证全服播报；开启 CSTV 录制与回放，确认全服广播与可中断 BGM 正常记录。
@@ -18,9 +18,10 @@
 
 ## 2. 战斗优先级与边界
 
-配置可区分的 `first_blood`、`streak.3`、`streak_shutdown`、`weapons.taser`、`headshot`、`teamkill`、`suicide` 及 `freeze_end` / 回合首尾 / MVP 提示：
+配置可区分的 `first_blood`、`combo.2`（`combo_window_seconds: 2.0`）、`streak.3`、`streak_shutdown`、`weapons.taser`、`headshot_streak.1` / `2`、`headshot`、`teamkill`、`suicide` 及 `freeze_end` / 回合首尾 / MVP 提示：
 
-- 单次敌对击杀只播报优先级最高的一条；`first_blood` 每回合至多一次；击杀 ≥3 连杀者时触发 `streak_shutdown`，被终结者下次击杀从连杀 1 起算；半场换边不清除连杀计数。
+- `imomoe_sounds_exclusive` 为 `1`（默认）时，单次或同 Tick 合并击杀仅播报优先级最高的一条（`first_blood` → `combo.N` → `streak.N` → `streak_shutdown` → `weapons.<name>` → `headshot_streak.N` → `headshot` → `kill`）；设为 `0` 时按维度叠加播报，且同 Tick 同维度至多一条；两种模式下全部连杀与爆头计数照常推进。
+- `first_blood` 每回合至多一次；`combo.N` 需在 `combo_window_seconds` 时间窗内连续击杀才触发（跨回合或阵亡重置）；`headshot_streak.N` 在回合内连续爆头时递进，未配置对应次数则回退通用 `headshot` 池；击杀 ≥3 连杀者时触发 `streak_shutdown`，被终结者下次击杀从连杀 1 起算；半场换边不清除连杀计数。
 - 同 Tick 内用 HE 击杀多个目标时至多播报一声，后续击杀仍计入连杀数。
 - 热身期正常播报且不污染正式局连杀与第一滴血；正式局首杀从第一滴血与连杀 1 重新开始。
 - 同 Tick 先误杀队友再击杀敌人时，敌人击杀仍正常触发并可拿到第一滴血；已埋 C4 爆炸致死不触发 `suicide`。

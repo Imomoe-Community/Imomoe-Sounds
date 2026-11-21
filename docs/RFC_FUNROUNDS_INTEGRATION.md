@@ -97,9 +97,9 @@ pub extern "C" fn StopCue(cue: &Str, entity_handle: i32) -> bool;
 
 ---
 
-## 5. 配置文件演进方案：直接切换 JSONC 规范
+## 5. 配置文件规范：直接采用 JSONC 格式
 
-项目处于 `0.1.0` 早期迭代阶段，直接将默认配置切换为支持注释的 `configs/imomoe_sounds/sounds.jsonc`（不保留旧 TOML 双格式历史包袱），配套提供 `sounds.schema.json` 以支持编辑器实时补全与静态校验：
+本插件直接将默认配置设计为支持注释的 `configs/imomoe_sounds/sounds.jsonc`（无旧配置格式包袱），配套提供 `sounds.schema.json` 以支持编辑器实时补全与静态校验：
 
 ```jsonc
 {
