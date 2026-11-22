@@ -70,6 +70,7 @@ pub(crate) struct Playback {
     pub config: Arc<Config>,
     pub mounted: BTreeSet<String>,
     next: HashMap<(CursorScope, String), usize>,
+    actor_death_ticks: HashMap<i32, i32>,
     rng: StdRng,
     tracks: Tracks,
 }
@@ -80,6 +81,7 @@ impl Playback {
             config: Arc::new(config),
             mounted: BTreeSet::new(),
             next: HashMap::new(),
+            actor_death_ticks: HashMap::new(),
             rng: StdRng::try_from_rng(&mut rand::rngs::SysRng)?,
             tracks: Tracks::default(),
         })
@@ -96,15 +98,36 @@ impl Playback {
 
     pub fn reset_map(&mut self) {
         self.next.clear();
+        self.actor_death_ticks.clear();
         self.mounted.clear();
         self.tracks = Tracks::default();
     }
 
     pub fn forget_actor(&mut self, slot: i32) {
+        self.actor_death_ticks.remove(&slot);
         if !self.next.is_empty() {
             self.next
                 .retain(|(scope, _), _| *scope != CursorScope::Actor(slot));
         }
+    }
+
+    pub fn actor_died(&mut self, slot: i32, tick: i32) {
+        self.actor_death_ticks.insert(slot, tick);
+    }
+
+    pub fn finish_deaths_before(&mut self, tick: i32) {
+        if self.actor_death_ticks.is_empty() {
+            return;
+        }
+        self.next.retain(|(scope, _), _| {
+            let CursorScope::Actor(slot) = scope else {
+                return true;
+            };
+            self.actor_death_ticks
+                .get(slot)
+                .is_none_or(|death| *death >= tick)
+        });
+        self.actor_death_ticks.retain(|_, death| *death >= tick);
     }
 
     pub fn forget_entity(&mut self, handle: i32) {
@@ -602,6 +625,8 @@ mod tests {
                 .as_deref(),
             Some("B1")
         );
+        playback.actor_died(1, 10);
+        playback.finish_deaths_before(11);
         playback.forget_entity(100);
         assert_eq!(
             playback

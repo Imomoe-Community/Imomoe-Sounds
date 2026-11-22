@@ -390,7 +390,7 @@ fn dispatch_death_batch(slot: i32, cues: &[String], exclusive: bool) -> (bool, b
 
 unsafe extern "C" fn on_game_frame(_: bool, _: bool, _: bool) {
     boundary("game frame", (), || {
-        let Some((batches, queued, exclusive)) = with_state(|state| {
+        let Some((batches, queued, exclusive, current_tick)) = with_state(|state| {
             let current_tick = s2sdk::GetGameTickCount();
             let formal: Vec<_> = state
                 .combat
@@ -418,6 +418,7 @@ unsafe extern "C" fn on_game_frame(_: bool, _: bool, _: bool) {
                 formal.into_iter().chain(warmup).collect::<Vec<_>>(),
                 (pending.is_some(), replacement),
                 exclusive,
+                current_tick,
             )
         }) else {
             return;
@@ -441,6 +442,8 @@ unsafe extern "C" fn on_game_frame(_: bool, _: bool, _: bool) {
                 });
             }
         }
+        // The victim may still have a kill queued from the tick they died.
+        with_state(|state| state.playback.finish_deaths_before(current_tick));
         if queued.0 && !queued.1 {
             dispatch(["round_start"], Target::Event(None));
         }
@@ -676,6 +679,7 @@ fn announce_death(event: usize) {
     let tick = s2sdk::GetGameTickCount();
     let game_time = f64::from(s2sdk::GetGameTime());
     let Some((actor, names, cue_kind)) = with_state(|state| {
+        state.playback.actor_died(victim, tick);
         let combo_window = state.playback.config.combo_window_seconds;
         let shutdown_min = state.playback.config.shutdown_min_streak;
         let combat = if warmup_death {
@@ -830,7 +834,10 @@ register_plugin!(start: start, end: end);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicI32, Ordering},
+    };
 
     static TEST_MUTEX: Mutex<()> = Mutex::new(());
     static EMISSIONS: Mutex<Vec<(String, Vec<i32>)>> = Mutex::new(Vec::new());
@@ -1000,8 +1007,7 @@ mod tests {
         assert!(!replaces_round_start(None, Some(12)));
     }
 
-    #[test]
-    fn dispatch_death_batch_supports_exclusive_and_stacked_modes_with_actor_sequential() {
+    fn with_death_test_state(config: &str, test: impl FnOnce()) {
         let _lock = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         crate::test_support::init_plugify_values();
 
@@ -1015,20 +1021,9 @@ mod tests {
             s2sdk::__s2sdk_EmitSoundToClient = Some(emit);
         }
         let dir = tempfile::tempdir().unwrap();
-        let config = Config::parse(
-            r#"{"announcements":{
-                "first_blood":{"clips":["FB"]},
-                "combo":{"2":{"clips":["C2"]}},
-                "streak":{"2":{"clips":["S2"]}},
-                "headshot_streak":{"1":{"clips":["HS1"]}},
-                "headshot":{"clips":["HSFallback"]},
-                "kill":{"order":"actor_sequential","clips":["K1","K2"]}
-            }}"#,
-        )
-        .unwrap();
         *STATE.lock().unwrap() = Some(State {
             thread: thread::current().id(),
-            playback: Playback::new(config).unwrap(),
+            playback: Playback::new(Config::parse(config).unwrap()).unwrap(),
             preferences: Preferences::new(dir.path().join("prefs.json"), true),
             combat: Combat::default(),
             warmup_combat: Combat::default(),
@@ -1044,7 +1039,35 @@ mod tests {
             life_state_offset: None,
             observer_pawn_offset: None,
         });
+        test();
+        STATE.lock().unwrap().take();
+        unsafe {
+            s2sdk::__s2sdk_GetMaxClients = None;
+            s2sdk::__s2sdk_IsClientInGame = None;
+            s2sdk::__s2sdk_IsFakeClient = None;
+            s2sdk::__s2sdk_IsClientSourceTV = None;
+            s2sdk::__s2sdk_GetClientSteamID64 = None;
+            s2sdk::__s2sdk_EntIndexToEntHandle = None;
+            s2sdk::__s2sdk_EmitSoundToClient = None;
+        }
+    }
 
+    #[test]
+    fn dispatch_death_batch_supports_exclusive_and_stacked_modes_with_actor_sequential() {
+        with_death_test_state(
+            r#"{"announcements":{
+                "first_blood":{"clips":["FB"]},
+                "combo":{"2":{"clips":["C2"]}},
+                "streak":{"2":{"clips":["S2"]}},
+                "headshot_streak":{"1":{"clips":["HS1"]}},
+                "headshot":{"clips":["HSFallback"]},
+                "kill":{"order":"actor_sequential","clips":["K1","K2"]}
+            }}"#,
+            assert_death_batch_dispatch,
+        );
+    }
+
+    fn assert_death_batch_dispatch() {
         let batch = vec![
             "first_blood".into(),
             "combo.2".into(),
@@ -1094,16 +1117,98 @@ mod tests {
                 ("K1".into(), vec![0, 1, 2]),
             ]
         );
+    }
 
-        STATE.lock().unwrap().take();
-        unsafe {
-            s2sdk::__s2sdk_GetMaxClients = None;
-            s2sdk::__s2sdk_IsClientInGame = None;
-            s2sdk::__s2sdk_IsFakeClient = None;
-            s2sdk::__s2sdk_IsClientSourceTV = None;
-            s2sdk::__s2sdk_GetClientSteamID64 = None;
-            s2sdk::__s2sdk_EntIndexToEntHandle = None;
-            s2sdk::__s2sdk_EmitSoundToClient = None;
+    #[test]
+    fn death_restarts_only_the_victims_personal_rotation_after_its_last_kill_batch() {
+        static TICK: AtomicI32 = AtomicI32::new(0);
+
+        unsafe extern "C" fn death_slot(event: usize, key: &Str) -> i32 {
+            if key.as_str() == "attacker" {
+                (event / 10) as i32 - 1
+            } else {
+                (event % 10) as i32
+            }
         }
+        unsafe extern "C" fn tick() -> i32 {
+            TICK.load(Ordering::Relaxed)
+        }
+        unsafe extern "C" fn time() -> f32 {
+            TICK.load(Ordering::Relaxed) as f32
+        }
+        unsafe extern "C" fn no_game_rules() -> usize {
+            0
+        }
+        unsafe extern "C" fn false_convar(_: u64) -> bool {
+            false
+        }
+        unsafe extern "C" fn team(slot: i32) -> CSTeam {
+            if slot % 2 == 0 { CSTeam::T } else { CSTeam::CT }
+        }
+        unsafe extern "C" fn headshot(_: usize, _: &Str) -> bool {
+            false
+        }
+        unsafe extern "C" fn weapon(_: usize, _: &Str) -> Str {
+            Str::from_str("ak47")
+        }
+
+        with_death_test_state(
+            r#"{"shutdown_min_streak":2,
+            "weapons":{"ak47":{"order":"sequential","clips":["G1","G2","G3","G4","G5","G6"]}},
+            "announcements":{
+                "kill":{"order":"actor_sequential","audience":"all","clips":["K1","K2","K3"]},
+                "streak":{"1":{"clips":["S1"]},"2":{"clips":["S2"]},"3":{"clips":["S3"]}},
+                "streak_shutdown":{"clips":["End"]}
+            }}"#,
+            || {
+                unsafe {
+                    s2sdk::__s2sdk_GetEventPlayerSlot = Some(death_slot);
+                    s2sdk::__s2sdk_GetEventBool = Some(headshot);
+                    s2sdk::__s2sdk_GetEventString = Some(weapon);
+                    s2sdk::__s2sdk_GetClientTeam = Some(team);
+                    s2sdk::__s2sdk_GetGameRules = Some(no_game_rules);
+                    s2sdk::__s2sdk_GetGameTickCount = Some(tick);
+                    s2sdk::__s2sdk_GetGameTime = Some(time);
+                    s2sdk::__s2sdk_GetConVarBool = Some(false_convar);
+                }
+                with_state(|state| state.exclusive_convar = 1);
+                let fire = |tick, kills: &[(usize, usize)]| {
+                    TICK.store(tick, Ordering::Relaxed);
+                    for &(killer, victim) in kills {
+                        let event = (killer + 1) * 10 + victim;
+                        unsafe { on_event(&Str::from_str("player_death"), event, false) };
+                    }
+                    TICK.store(tick + 1, Ordering::Relaxed);
+                    unsafe { on_game_frame(false, false, false) };
+                    std::mem::take(&mut *EMISSIONS.lock().unwrap())
+                        .into_iter()
+                        .map(|(clip, _)| clip)
+                        .collect::<Vec<_>>()
+                };
+                EMISSIONS.lock().unwrap().clear();
+
+                const A: usize = 0;
+                const B: usize = 1;
+                assert_eq!(fire(10, &[(A, 3)]), ["S1", "G1", "K1"]);
+                assert_eq!(fire(20, &[(B, 2)]), ["S1", "G2", "K1"]);
+                assert_eq!(
+                    fire(30, &[(A, 3), (B, A)]),
+                    ["S2", "G3", "K2", "S2", "End", "G4", "K2"]
+                );
+                // A is back in play; B did not die and the weapon playlist is global.
+                assert_eq!(fire(40, &[(A, 3)]), ["S1", "G5", "K1"]);
+                assert_eq!(fire(50, &[(B, 2)]), ["S3", "G6", "K3"]);
+                unsafe {
+                    s2sdk::__s2sdk_GetEventPlayerSlot = None;
+                    s2sdk::__s2sdk_GetEventBool = None;
+                    s2sdk::__s2sdk_GetEventString = None;
+                    s2sdk::__s2sdk_GetClientTeam = None;
+                    s2sdk::__s2sdk_GetGameRules = None;
+                    s2sdk::__s2sdk_GetGameTickCount = None;
+                    s2sdk::__s2sdk_GetGameTime = None;
+                    s2sdk::__s2sdk_GetConVarBool = None;
+                }
+            },
+        );
     }
 }

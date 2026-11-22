@@ -14,7 +14,7 @@
 
 顺序同步与个人静音隔离可用双人（A、B）配合 CT BOT 验收（BOT 可提供击杀事件，不作为收听端）：
 
-1. 基于 [默认示例配置](../configs/imomoe_sounds/sounds.example.jsonc) 部署 `sounds.jsonc`。将 `announcements.kill.audience` 设为 `"all"`，A 用 AK 身体击杀两次：A、B 每次听到同一条提示且两次按配置顺序轮换；换图后重置回第一条。改为 `"actor_sequential"` 时，A 与 B 各自独立按序轮换互不抢进度，断线重连后从第一条重新开始。改为 `"random"` 后允许连续重复。
+1. 基于 [默认示例配置](../configs/imomoe_sounds/sounds.example.jsonc) 部署 `sounds.jsonc`。将 `announcements.kill.audience` 设为 `"all"`，A 用 AK 身体击杀两次：A、B 每次听到同一条提示且两次按配置顺序轮换；换图后重置回第一条。把 `announcements.kill.order` 改为 `"actor_sequential"` 并重启载入，让 A、B 各用 AK 身体击杀一次（都播第一条），再只让 A 被 BOT 击杀。A 重生后下一次击杀仍播第一条，B 下一次击杀播第二条；断线重连也会重置该玩家的轮播。改为 `"random"` 后允许连续重复。
 2. 将 `announcements.kill.clips` 设为单条固定音轨并关闭 `announcements.streak`，击杀 CT BOT 默认可听；输入 `!sound` 收到关闭回显后再击杀只剩枪声。
 3. 保持静音状态下依次重连、换图与正常重启服务端，击杀均应保持静音；再次输入 `!sound` 恢复播报后，`player_preferences.json` 不再保留该玩家的覆盖记录。双人测试时仅让 B 静音，A 击杀第三次应仅 A 听到播报。
 4. 触发 `BroadcastCue(cue, 2)` 并在 T → CT → T 间切换阵营：T 听到提示、CT 无声、切回 T 再次听到。让 B 切至观察者验证全服播报；开启 CSTV 录制与回放，确认全服广播与可中断 BGM 正常记录。
@@ -69,7 +69,7 @@ Run these happy-path acceptance checks on an isolated test server with paired `i
 
 Verify sequential sync and mute isolation using two human clients (A, B) plus CT bots (bots generate kill events, not listener state):
 
-1. Deploy `sounds.jsonc` from [sounds.example.jsonc](../configs/imomoe_sounds/sounds.example.jsonc). Set `announcements.kill.audience` to `"all"` and have A score two AK body kills: A and B hear the same clip each time in order, resetting on map change. Switch to `"actor_sequential"`: A and B advance independently without stealing each other's cursor, resetting on reconnect. Switch to `"random"`: consecutive repeats are allowed.
+1. Deploy `sounds.jsonc` from [sounds.example.jsonc](../configs/imomoe_sounds/sounds.example.jsonc). Set `announcements.kill.audience` to `"all"` and have A score two AK body kills: A and B hear the same clip each time in order, resetting on map change. Set `announcements.kill.order` to `"actor_sequential"` and restart to load the config. Have A and B score one AK body kill each (both play clip 1), then have a bot kill A only. After A respawns, A's next kill plays clip 1 again and B's next kill plays clip 2. Reconnecting also resets that player's rotation. Switch to `"random"`: consecutive repeats are allowed.
 2. Set `announcements.kill.clips` to a single clip and disable `announcements.streak`. Kill a CT bot (audible), run `!sound` to mute, and kill again (gunshot only).
 3. Keep muted across reconnect, map change, and clean server restart; toggle `!sound` back on and confirm `player_preferences.json` removes that player's override. With only B muted, A's third kill is heard only by A.
 4. Trigger `BroadcastCue(cue, 2)` while switching T → CT → T: heard on T, silent on CT, heard again on T. Move B to spectator to verify all-audience broadcasts; verify CSTV recording/playback captures world broadcasts and interruptible BGM.

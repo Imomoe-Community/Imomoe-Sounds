@@ -39,7 +39,7 @@ Sounds 将普通 `round_start` 播报延到下一帧；配对的 FunRounds 通�
 | 状态 | 管理方式 |
 | --- | --- |
 | Workshop 可用资产 | 每次构建地图 Manifest，确认物品在 `s2_extra_addons`、检查编译后的事件表与资源，再调用 `Precache`。缺少文件时只跳过关联音轨。当前 Sounds 使用 `ReadFileVPK` 检查编译文件；配对 S2SDK 的实现会把完整文件读入 buffer 并返回字符串。SDK 也导出绝对路径枚举，但没有证据证明它能检查 VPK 内部条目，所以仍逐图检查以匹配 Workshop 挂载状态，不缓存上张图结果。 |
-| 顺序游标 | `sequential` 按 Cue 维护全局游标（换图清空）；`actor_sequential` 按玩家槽位或实体句柄维护独立游标，断线、实体删除或换图时清理。 |
+| 顺序游标 | `sequential` 按 Cue 维护全局游标（换图清空）；`actor_sequential` 按玩家槽位或实体句柄维护独立游标。阵亡所在 Tick 的播报结算后，只清除阵亡玩家的游标；断线、实体删除或换图也会清理对应游标。 |
 | 播报个人偏好 | 以 SteamID64 为键，记录相对服务端默认值的差异。`!sound` 切换时在同目录临时写入并原子替换；失败时告知玩家只对本次会话生效。读到损坏文件时保留原件。 |
 | 空间音轨 | 以完整实体句柄与 cue 为键，只跟踪已请求播放的实际事件；重播、明确停止或卸载时停止，删除实体或换图时丢弃记录。 |
 | 可中断世界音轨 | 记录实际事件名，`round_prestart` 或卸载时停止。若两个世界 cue 共用事件名，Source 2 会一起停止；给需要独立停止的 BGM 分配独立事件名。 |
@@ -78,7 +78,7 @@ flowchart TD
 | State | Management |
 | --- | --- |
 | Workshop Assets | Verified per map during `OnBuildGameSessionManifest` via `ReadFileVPK` against `s2_extra_addons` before `Precache`; missing files skip only affected clips. |
-| Sequence Cursors | `sequential` tracks global map-scoped cursors; `actor_sequential` tracks per-slot or per-entity cursors cleared on disconnect, entity deletion, or map end. |
+| Sequence Cursors | `sequential` tracks global map-scoped cursors; `actor_sequential` tracks per-slot or per-entity cursors. After resolving the death tick's announcements, clear only the victim's cursors. Disconnect, entity deletion, and map end also clear the corresponding cursors. |
 | Personal Preferences | Keyed by SteamID64, storing only differences from `enabled_by_default`, written atomically via same-directory temp replacement. |
 | Spatial Cues | Keyed by full entity handle and cue; stopped on replay, `StopCue`, or unload, and dropped on entity deletion or map change. |
 | Interruptible World Cues | Tracks actual emitted event names and stops them on `round_prestart` or unload. |
