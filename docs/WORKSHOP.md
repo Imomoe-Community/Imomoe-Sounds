@@ -1,10 +1,16 @@
-# Workshop 自定义音效配置与分发指南
+# Workshop 自定义音效配置与分发指南 / Workshop Guide
+
+[简体中文](#简体中文) | [English](#english)
+
+---
+
+## 简体中文
 
 Imomoe Sounds 通过 S2SDK 的 `s2_extra_addons` 将同一份 Workshop 音效包公共分发给所有客户端。玩家首次进服时自动下载并在本地缓存，后续复用 Steam 缓存。仅使用 [默认示例预设](../configs/imomoe_sounds/sounds.example.jsonc) 中的 CS2 内置音效时，无需配置 Workshop。
 
 ---
 
-## 1. 接入已有 Workshop 音效包
+### 1. 接入已有 Workshop 音效包
 
 1. 将音效包物品 ID 加入服务端 `s2_extra_addons`：
 
@@ -20,7 +26,7 @@ Imomoe Sounds 通过 S2SDK 的 `s2_extra_addons` 将同一份 Workshop 音效包
 
 ---
 
-## 2. 服务端自动更新与存放位置
+### 2. 服务端自动更新与存放位置
 
 - **自动检查更新**：S2SDK 的 `s2_addon_mount_download` 默认值为 `0`（已安装过的 Workshop 物品不会主动拉取更新）。如需服务端自动跟进音效包更新，建议在服务端配置加入：
 
@@ -33,7 +39,7 @@ Imomoe Sounds 通过 S2SDK 的 `s2_extra_addons` 将同一份 Workshop 音效包
 
 ---
 
-## 3. 制作与编译 SoundEvent 规范
+### 3. 制作与编译 SoundEvent 规范
 
 - **UI 播报与背景音乐（`announcements` / `funrounds.flavor`）**：
   - 在 Source 2 `.vsndevts` 中将 `mixgroup` 设为 `"UI"`，并关闭距离衰减与混响（`use_distance_volume_mapping_curve = false`、`distance_effect_mix = 0.0`），以确保不被客户端 `snd_musicvolume 0` 屏蔽。
@@ -44,6 +50,49 @@ Imomoe Sounds 通过 S2SDK 的 `s2_extra_addons` 将同一份 Workshop 音效包
 
 ---
 
-## 4. 客户端下载验收
+### 4. 客户端下载验收
 
 使用未本地缓存该 Workshop 物品的客户端进行 [公共分发验收](ACCEPTANCE.md#3-公共-workshop-分发)。若复用测试客户端，请先退出 CS2，在 Steam 客户端中订阅并等待下载完成后再取消订阅，以同时清理本地文件与 Steam 安装记录。
+
+---
+
+## English
+
+Imomoe Sounds distributes a shared Workshop sound pack via S2SDK `s2_extra_addons`. Clients download it once on first join and reuse their local Steam cache afterward. No Workshop setup is needed when using only built-in CS2 events from [sounds.example.jsonc](../configs/imomoe_sounds/sounds.example.jsonc).
+
+---
+
+### 1. Attaching a Workshop Sound Pack
+
+1. Add the Workshop item ID to `s2_extra_addons`:
+
+   ```text
+   s2_extra_addons "<WORKSHOP_ID>"
+   ```
+
+   - Separate multiple IDs with commas without spaces (e.g. `s2_extra_addons "3763619947,1234567890"`).
+   - Keep S2SDK's default `"3763619947"` if your server uses S2SDK's built-in WASD button menu icons.
+
+2. Copy [sounds.workshop.example.jsonc](../configs/imomoe_sounds/sounds.workshop.example.jsonc) to `configs/imomoe_sounds/sounds.jsonc` (keeping `schemas/`), set `workshop.id`, and list each custom `.vsnd` path once under `workshop.resources`.
+3. On map load (`OnBuildGameSessionManifest`), the plugin checks mounted VPKs for compiled `.vsndevts_c` and `.vsnd_c` assets and precaches valid tracks; missing assets log warnings and are skipped.
+
+---
+
+### 2. Server Auto-Update & Storage Location
+
+- Set `s2_addon_mount_download 1` to let S2SDK fetch Workshop updates in the background on map load (applied on the next map change or restart), or manually run `s2_download_addon <WORKSHOP_ID>` when kept at `0`.
+- Dedicated servers download Workshop VPKs into `<EXECUTABLE_PATH>/steamapps/workshop/content/730/<WORKSHOP_ID>/`. Inspect mounted paths with `s2_print_searchpaths`.
+
+---
+
+### 3. Authoring & Compiling SoundEvents
+
+- **UI Announcements & Mode BGM (`announcements` / `funrounds.flavor`)**: Set `mixgroup = "UI"`, `use_distance_volume_mapping_curve = false`, and `distance_effect_mix = 0.0` so `snd_musicvolume 0` does not mute announcements.
+- **Spatial Tactical Cues (`funrounds.tactical`)**: Use mono audio sources with appropriate 3D distance attenuation curves rather than 2D UI templates.
+- **Loudness & Compilation**: Normalize loudness prior to compiling `.vsnd_c` and `.vsndevts_c` via CS2 Workshop Tools.
+
+---
+
+### 4. Client Download Verification
+
+Test with an uncached client following [Workshop Acceptance](ACCEPTANCE.md#3-public-workshop-distribution). To clear a test client's cache cleanly, exit CS2, subscribe and finish downloading on Steam, then unsubscribe.

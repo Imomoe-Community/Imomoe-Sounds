@@ -1,10 +1,16 @@
-# FunRounds 联动配置说明
+# FunRounds 联动配置说明 / FunRounds Integration
+
+[简体中文](#简体中文) | [English](#english)
+
+---
+
+## 简体中文
 
 本文档说明 `imomoe_sounds` 与 `funrounds` 的配置对接契约。游戏规则与触发时机由 FunRounds 控制，`imomoe_sounds` 仅按当前配置选曲与发声，不会因曲目缺失或未加载音效插件而阻断玩法。
 
 ---
 
-## FunRounds 玩法侧联动与前缀配置
+### FunRounds 玩法侧联动与前缀配置
 
 - **模式开局 BGM**：在 FunRounds 模式配置中声明 `round_bgm_cue = "funrounds.flavor.<名称>"`（可在 `[defaults]` 统一设置，并在个别模式下设为 `false` 清除）。该 Cue 须对应非空间音轨；当 `BroadcastRoundStartCue` 在同 Tick 成功发出模式 BGM 时，Sounds 会跳过默认的 `announcements.round_start` 播报；若模式 Cue 不可用或未发出则保留默认播报。
 - **幽灵呼吸与空间距**：FunRounds 负责配置 `breath_interval`（若需关闭呼吸请将 `breath_interval` 设为 `0.0`）与 `breath_distance` 等节拍与距离上限；实际发声距离上限取玩法侧 `distance_cap`（非零时）与 `sounds.jsonc` 中 `distance` 的较小值。
@@ -12,7 +18,7 @@
 
 ---
 
-## Cue 配置映射
+### Cue 配置映射
 
 `clips` 可混用 CS2 内置事件与在 `workshop.resources` 中登记的自定义事件，支持 `sequential` / `actor_sequential` / `random` 与空列表静音：
 
@@ -24,7 +30,7 @@
 }
 ```
 
-### FunRounds 战术空间键（`funrounds.tactical.*`）
+#### FunRounds 战术空间键（`funrounds.tactical.*`）
 
 所有战术键的完整调用名以 `funrounds.tactical.` 开头，必须配置 `"spatial": true`，受众固定为 `all` 且不受 `!sound` 个人静音控制：
 
@@ -41,7 +47,7 @@
 | `c4_revenge_spawn`、`c4_revenge_explosion`、`c4_revenge_retire` | C4 复仇鸡出场、爆炸、击杀后隐退 |
 | `chicken_idle`、`chicken_panic` | 变鸡待机、受惊 |
 
-### 受 `!sound` 控制的联动与播报键
+#### 受 `!sound` 控制的联动与播报键
 
 | 配置键 | 触发与受众说明 |
 | --- | --- |
@@ -59,3 +65,51 @@
 
 > [!NOTE]
 > `round_end.*` 结果路由依赖 S2SDK 的 `GetEventInt` 导出（见 [bindings/s2sdk.pplugin](../bindings/s2sdk.pplugin)）。若运行在缺少该导出的裁剪版 provider 上，启动日志会记录警告并回退至公共 `round_end`。
+
+---
+
+## English
+
+This document defines the configuration contract between `imomoe_sounds` and `funrounds`. FunRounds owns gameplay rules and timing; `imomoe_sounds` selects and emits audio without blocking gameplay if cues are missing or the plugin is absent.
+
+---
+
+### Mode BGM, Breathing & Prefix Settings
+
+- **Opening Mode BGM**: Set `round_bgm_cue = "funrounds.flavor.<name>"` in FunRounds (or in `[defaults]`, disabled per mode with `false`). When `BroadcastRoundStartCue` emits on a tick, Sounds suppresses the default `announcements.round_start`; if unavailable or unemitted, default `round_start` plays.
+- **Ghost Breathing & Distance**: FunRounds sets `breath_interval` (`0.0` disables) and `breath_distance`; effective spatial distance uses `min(distance_cap, sounds_config.distance)` when `distance_cap > 0`.
+- **Chat Prefix**: Configure `chat_prefix_marker` (e.g. `"<prefix>"` or `"{prefix}"`); Sounds prepends `imomoe_chat_prefix` when present and strips the marker cleanly when absent. Console replies stay plain text.
+
+---
+
+### Cue Mapping
+
+#### Spatial Tactical Keys (`funrounds.tactical.*`)
+
+Require `"spatial": true`; always target `all` and ignore personal `!sound` muting:
+
+| Key | Trigger |
+| --- | --- |
+| `ghost_breath` | Ghost breathing pulse |
+| `suicide_warning`, `suicide_explosion` | Suicide bomb warning / detonation |
+| `chrono_teleport` | Zeus teleport arrival |
+| `chrono_stasis_lock`, `chrono_stasis_kill` | Stasis lock / execution kill |
+| `grapple_attach`, `grapple_release` | Grapple attach / release |
+| `explosive_bullet` | Explosive bullet blast |
+| `chicken_eat_heal`, `chicken_eat_overfull`, `chicken_eat_fatal`, `chicken_eat_switch` | Chicken eat heal / overfull / fatal / bomb switch |
+| `chicken_explosion`, `chicken_revenge` | Chicken explosion / revenge damage |
+| `c4_revenge_spawn`, `c4_revenge_explosion`, `c4_revenge_retire` | C4 revenge chicken spawn / explosion / retire |
+| `chicken_idle`, `chicken_panic` | Chicken mode idle / panic |
+
+#### Preference-Controlled Keys (`!sound`)
+
+| Key | Trigger & Audience |
+| --- | --- |
+| `announcements.combo.<N>` | Hostile kills within `combo_window_seconds` (`all` or `actor`) |
+| `announcements.headshot_streak.<N>` | Consecutive headshots per round (falls back to `headshot`) |
+| `announcements.join_server` | Human full connect (`actor` or `all`, bots skipped) |
+| `announcements.round_end.ct`, `round_end.t`, `round_end.draw` | Winner/draw routed (`all`), falling back to `announcements.round_end` |
+| `funrounds.flavor.player_blind`, `regeneration`, `<name>` | Blinded player, regen player, and `round_bgm_cue` tracks (non-spatial) |
+
+> [!NOTE]
+> `round_end.*` routing requires S2SDK `GetEventInt` ([bindings/s2sdk.pplugin](../bindings/s2sdk.pplugin)); trimmed providers missing it log a warning and fall back to shared `round_end`.

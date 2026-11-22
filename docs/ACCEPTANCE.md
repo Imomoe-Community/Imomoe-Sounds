@@ -1,10 +1,16 @@
-# Imomoe Sounds 验收测试指南
+# Imomoe Sounds 验收测试指南 / Acceptance Guide
+
+[简体中文](#简体中文) | [English](#english)
+
+---
+
+## 简体中文
 
 在隔离测试服上使用配对的 `imomoe_sounds`、FunRounds 与 S2SDK（`>=3.4.2`）执行以下正常路径验收。
 
 ---
 
-## 1. 播报与个人偏好
+### 1. 播报与个人偏好
 
 顺序同步与个人静音隔离可用双人（A、B）配合 CT BOT 验收（BOT 可提供击杀事件，不作为收听端）：
 
@@ -16,7 +22,7 @@
 
 ---
 
-## 2. 战斗优先级与边界
+### 2. 战斗优先级与边界
 
 配置可区分的 `first_blood`、`combo.2`（`combo_window_seconds: 2.0`）、`streak.3`、`streak_shutdown`、`weapons.taser`、`headshot_streak.1` / `2`、`headshot`、`teamkill`、`suicide` 及 `freeze_end` / 回合首尾 / MVP 提示：
 
@@ -29,7 +35,7 @@
 
 ---
 
-## 3. 公共 Workshop 分发
+### 3. 公共 Workshop 分发
 
 参考 [Workshop 指南](WORKSHOP.md) 在 `s2_extra_addons` 添加音效包并部署 [Workshop 示例配置](../configs/imomoe_sounds/sounds.workshop.example.jsonc)：
 
@@ -38,7 +44,7 @@
 
 ---
 
-## 4. FunRounds 联动与前缀检查
+### 4. FunRounds 联动与前缀检查
 
 | 用例 | 预期结果 |
 | --- | --- |
@@ -50,3 +56,58 @@
 | 真人进服（`actor` / `all`）与 BOT 加入 | 仅按受众向未静音的真人播报；BOT 加入不触发 `join_server`。 |
 | 配置 `round_end.ct` / `t` / `draw` 与公共 `round_end` | 各胜负结果播放对应列表；未配置结果键使用公共列表；设为 `clips: []` 的结果保持静音。 |
 | 安装与卸载 `imomoe_chat_prefix` | 已安装时 `!sound` 聊天回复带彩色前缀，卸载或缺失时仅显示正文；控制台回复始终无标记与控制色。 |
+
+---
+
+## English
+
+Run these happy-path acceptance checks on an isolated test server with paired `imomoe_sounds`, FunRounds, and S2SDK (`>=3.4.2`).
+
+---
+
+### 1. Announcements & Personal Preferences
+
+Verify sequential sync and mute isolation using two human clients (A, B) plus CT bots (bots generate kill events, not listener state):
+
+1. Deploy `sounds.jsonc` from [sounds.example.jsonc](../configs/imomoe_sounds/sounds.example.jsonc). Set `announcements.kill.audience` to `"all"` and have A score two AK body kills: A and B hear the same clip each time in order, resetting on map change. Switch to `"actor_sequential"`: A and B advance independently without stealing each other's cursor, resetting on reconnect. Switch to `"random"`: consecutive repeats are allowed.
+2. Set `announcements.kill.clips` to a single clip and disable `announcements.streak`. Kill a CT bot (audible), run `!sound` to mute, and kill again (gunshot only).
+3. Keep muted across reconnect, map change, and clean server restart; toggle `!sound` back on and confirm `player_preferences.json` removes that player's override. With only B muted, A's third kill is heard only by A.
+4. Trigger `BroadcastCue(cue, 2)` while switching T → CT → T: heard on T, silent on CT, heard again on T. Move B to spectator to verify all-audience broadcasts; verify CSTV recording/playback captures world broadcasts and interruptible BGM.
+5. Run `!sound` on English and Chinese clients to verify localization; with `mixgroup = "UI"` Workshop tracks, verify cues remain audible at `snd_musicvolume 0`.
+
+---
+
+### 2. Combat Priority & Edge Cases
+
+Configure distinguishable cues for `first_blood`, `combo.2` (`combo_window_seconds: 2.0`), `streak.3`, `streak_shutdown`, `weapons.taser`, `headshot_streak.1` / `2`, `headshot`, `teamkill`, `suicide`, and `freeze_end` / round / MVP cues:
+
+- With `imomoe_sounds_exclusive 1` (default), emit only the highest-priority cue per tick (`first_blood` → `combo.N` → `streak.N` → `streak_shutdown` → `weapons.<name>` → `headshot_streak.N` → `headshot` → `kill`); with `0`, emit up to one cue per dimension per tick; verify all counters advance in both modes.
+- Verify `first_blood` fires at most once per round, `combo.N` requires consecutive kills within `combo_window_seconds` (resets on death/round), `headshot_streak.N` increments on consecutive headshots (falling back to `headshot`), `streak_shutdown` triggers on killing ≥3-streak players, and half-time side swap preserves streaks.
+- Multi-kill HE grenade in one tick emits once while incrementing streaks for all kills.
+- Warmup announces normally without polluting live-match first blood or streaks.
+- Teamkill + enemy kill in the same tick still grants the enemy kill and first blood; planted C4 deaths do not trigger `suicide`.
+- Non-FFA friendly kills route to `teamkill`; FFA (`mp_teammates_are_enemies 1`) treats them as hostile kills; suicides and world damage do not consume first blood.
+
+---
+
+### 3. Public Workshop Distribution
+
+Follow [Workshop Guide](WORKSHOP.md#english) to add the addon ID to `s2_extra_addons` and deploy [sounds.workshop.example.jsonc](../configs/imomoe_sounds/sounds.workshop.example.jsonc):
+
+- Join with an uncached client to verify auto-download, reconnect, and playback across maps (e.g. Dust II, Mirage).
+- Verify missing resources log warnings and skip only affected tracks without blocking valid cues.
+
+---
+
+### 4. FunRounds Integration & Prefix Checks
+
+| Case | Expected Result |
+| --- | --- |
+| Mode sets `round_bgm_cue`; A unmuted, B muted | Only A hears mode BGM; `round_prestart` stops unfinished `interruptible` tracks. |
+| Mode BGM & `announcements.round_start` same tick | Emitted mode BGM suppresses default `round_start`; unavailable mode cue falls back to default `round_start`. |
+| Ghost breathing (B muted via `!sound`) | Alive players filter by own position; dead/spectators filter only in first-person spectating target; stops immediately on ghost death or mode end. |
+| T suicide bomber (`!sound` off) | Countdown warning plays; explosion stops warning and plays boom; early kill stops warning immediately with no delayed boom. |
+| Unload / run without `imomoe_sounds` | Map change and shutdown produce no errors or dangling handles; FunRounds gameplay runs normally without Sounds. |
+| Human `join_server` (`actor` / `all`) vs BOT join | Announces only to unmuted humans per audience; bots never trigger `join_server`. |
+| `round_end.ct` / `t` / `draw` vs shared `round_end` | Matches winner/draw routes; missing keys fall back to `round_end`; `clips: []` stays silent. |
+| `imomoe_chat_prefix` loaded vs absent | `!sound` chat reply prepends colored prefix when loaded and plain body when absent; console reply stays plain text. |

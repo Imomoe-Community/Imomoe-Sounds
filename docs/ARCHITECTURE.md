@@ -1,10 +1,16 @@
-# Architecture and Design
+# Architecture and Design / 架构与设计
+
+[简体中文](#简体中文) | [English](#english)
+
+---
+
+## 简体中文
 
 `imomoe_sounds` 通过 S2SDK 接入游戏事件、聊天命令和资源清单；只在游戏线程调用引擎。外部 ABI、事件、指令和生命周期入口均捕获 Rust panic。
 
 ---
 
-## 播放请求如何变成一次发声
+### 播放请求如何变成一次发声
 
 ```mermaid
 flowchart TD
@@ -26,7 +32,9 @@ flowchart TD
 
 Sounds 将普通 `round_start` 播报延到下一帧；配对的 FunRounds 通过 `BroadcastRoundStartCue` 提交模式 BGM。同 tick 成功发出模式 BGM 时跳过默认播报；曲目不可用或没有成功发出时保留默认播报。通用 `BroadcastCue` 不参与这项裁决。
 
-## 资源和状态生命周期
+---
+
+### 资源和状态生命周期
 
 | 状态 | 管理方式 |
 | --- | --- |
@@ -37,3 +45,42 @@ Sounds 将普通 `round_start` 播报延到下一帧；配对的 FunRounds 通�
 | 可中断世界音轨 | 记录实际事件名，`round_prestart` 或卸载时停止。若两个世界 cue 共用事件名，Source 2 会一起停止；给需要独立停止的 BGM 分配独立事件名。 |
 
 FunRounds 拥有模式配置、实体身份、呼吸节拍和自爆倒计时；Sounds 拥有选曲、声源、距离与停止。具体配对见 [联动交付](FUNROUNDS_INTEGRATION.md)。
+
+---
+
+## English
+
+`imomoe_sounds` integrates with game events, chat commands, and resource manifests through S2SDK on the game thread only. All external ABI, event, command, and lifecycle entry points catch Rust panics.
+
+---
+
+### Request Flow
+
+```mermaid
+flowchart TD
+    In["Game Event or Plugify Cue"] --> Choose["Match Cue Pool & Spatial/World Category"]
+    Choose --> Audience["Resolve Player, Team, or All Audience"]
+    Audience --> Filter["Apply Distance Cap & Personal !sound Filter"]
+    Filter --> Clip["Select One Available Clip per Trigger"]
+    Clip --> Emit["Emit to Eligible Listeners"]
+    Emit --> Track["Track Actual Clip Name for Stoppable Cues"]
+```
+
+- `round_prestart` stops interruptible tracks from the prior round and resets `first_blood`, `combo`, `headshot_streak`, and per-tick queues; live-match `streak` persists across rounds/side swaps until death or disconnect. Warmup uses isolated state.
+- Multiple deaths from the same attacker in one tick queue and resolve on the next `OnGameFrame`, ordered by `first_blood` → `combo.N` → `streak.N` → `streak_shutdown` → `weapons.<name>` → `headshot_streak.N` → `headshot` → `kill` → `teamkill`. ConVar `imomoe_sounds_exclusive` (`1` default) emits only the top candidate; `0` emits up to one per dimension; all counters advance in both modes.
+- Global broadcasts include human spectators and CSTV while excluding T/CT bots. Spatial cues filter alive players by self position and dead/spectating players only in first-person mode by spectated target position.
+- `round_start` defers one frame so `BroadcastRoundStartCue` can suppress the default track if a mode BGM emits on that tick.
+
+---
+
+### Resource & State Lifecycle
+
+| State | Management |
+| --- | --- |
+| Workshop Assets | Verified per map during `OnBuildGameSessionManifest` via `ReadFileVPK` against `s2_extra_addons` before `Precache`; missing files skip only affected clips. |
+| Sequence Cursors | `sequential` tracks global map-scoped cursors; `actor_sequential` tracks per-slot or per-entity cursors cleared on disconnect, entity deletion, or map end. |
+| Personal Preferences | Keyed by SteamID64, storing only differences from `enabled_by_default`, written atomically via same-directory temp replacement. |
+| Spatial Cues | Keyed by full entity handle and cue; stopped on replay, `StopCue`, or unload, and dropped on entity deletion or map change. |
+| Interruptible World Cues | Tracks actual emitted event names and stops them on `round_prestart` or unload. |
+
+See [FunRounds Integration](FUNROUNDS_INTEGRATION.md#english) for the integration contract.
