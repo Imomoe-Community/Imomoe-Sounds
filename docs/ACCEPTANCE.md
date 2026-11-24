@@ -6,7 +6,7 @@
 
 ## 简体中文
 
-在隔离测试服上使用配对的 `imomoe_sounds`、FunRounds 与 S2SDK（`>=3.4.2`）执行以下正常路径验收。
+在隔离测试服上使用配对的 `imomoe_sounds`、FunRounds 与 S2SDK（`>=3.4.3`）执行以下正常路径验收。
 
 ---
 
@@ -61,7 +61,7 @@
 
 ## English
 
-Run these happy-path acceptance checks on an isolated test server with paired `imomoe_sounds`, FunRounds, and S2SDK (`>=3.4.2`).
+Run these happy-path acceptance checks on an isolated test server with paired `imomoe_sounds`, FunRounds, and S2SDK (`>=3.4.3`).
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/untrustedmodders/plugify/refs/heads/main/schemas/plugin.schema.json",
-  "version": "3.4.2",
+  "version": "3.4.3",
   "name": "s2sdk",
   "description": "Provides functionality for other plugins from Source 2 engine",
   "author": "untrustedmodders",
@@ -266,24 +266,6 @@
       "retType": {
         "type": "bool",
         "description": "true if the command was successfully created; otherwise, false."
-      }
-    },
-    {
-      "name": "HasConsoleCommandCallbacks",
-      "group": "Commands",
-      "description": "Local compatibility bridge: checks live callbacks, not retained command names.",
-      "funcName": "HasConsoleCommandCallbacks",
-      "paramTypes": [
-        {
-          "name": "name",
-          "type": "string",
-          "ref": false,
-          "description": "Command name."
-        }
-      ],
-      "retType": {
-        "type": "bool",
-        "description": "Whether the engine command has callbacks registered."
       }
     },
     {

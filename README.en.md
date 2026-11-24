@@ -26,7 +26,7 @@
 
 - CS2 Dedicated Server with compatible Plugify (`v3.1.0+`)
 - Plugify Rust Module (`1.3.0`; if using `1.2.5`, follow its Linux library filename convention)
-- S2SDK `>=3.4.2` (trimmed S2SDK providers must include all methods and prototypes declared in [bindings/s2sdk.pplugin](bindings/s2sdk.pplugin))
+- Official [S2SDK](https://github.com/untrustedmodders/plugify-plugin-s2sdk) `>=3.4.3` (trimmed providers must retain the methods and prototypes in [bindings/s2sdk.pplugin](bindings/s2sdk.pplugin))
 - (Optional) [Imomoe Chat Prefix](https://github.com/Imomoe-Community/Imomoe-Chat-Prefix) (`imomoe_chat_prefix >=0.1.0`) for unified `!sound` chat reply prefixes
 
 ---

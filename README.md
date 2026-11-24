@@ -28,7 +28,7 @@
 
 - CS2 Dedicated Server 与兼容的 Plugify（`v3.1.0+`）<br><sub><sup>CS2 Dedicated Server with compatible Plugify (`v3.1.0+`)</sup></sub>
 - Plugify Rust Module（`1.3.0`，若使用 `1.2.5` 请注意 Linux 产物文件名约定）<br><sub><sup>Plugify Rust Module (`1.3.0`, or `1.2.5` with the Linux filename convention)</sup></sub>
-- S2SDK `>=3.4.2`（若使用裁剪过的 S2SDK provider，请确保导出清单包含 [bindings/s2sdk.pplugin](bindings/s2sdk.pplugin) 声明的方法与原型）<br><sub><sup>S2SDK `>=3.4.2` (trimmed providers must retain all methods and prototypes in [bindings/s2sdk.pplugin](bindings/s2sdk.pplugin))</sup></sub>
+- 官方 [S2SDK](https://github.com/untrustedmodders/plugify-plugin-s2sdk) `>=3.4.3`（若使用裁剪版，请保留 [bindings/s2sdk.pplugin](bindings/s2sdk.pplugin) 中的方法和原型）<br><sub><sup>Official S2SDK `>=3.4.3` (trimmed providers must retain the methods and prototypes in [bindings/s2sdk.pplugin](bindings/s2sdk.pplugin))</sup></sub>
 - （可选）[Imomoe Chat Prefix](https://github.com/Imomoe-Community/Imomoe-Chat-Prefix)（`imomoe_chat_prefix >=0.1.0`），用于统一 `!sound` 聊天回复前缀<br><sub><sup>(Optional) [Imomoe Chat Prefix](https://github.com/Imomoe-Community/Imomoe-Chat-Prefix) (`>=0.1.0`) for `!sound` chat reply prefixes</sup></sub>
 
 ---

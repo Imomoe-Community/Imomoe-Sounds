@@ -47,26 +47,6 @@ pub type _AddConsoleCommand =
 #[unsafe(no_mangle)]
 pub static mut __s2sdk_AddConsoleCommand: Option<_AddConsoleCommand> = None;
 
-/// Local compatibility bridge: checks live callbacks, not retained command names.
-///
-/// # Arguments
-/// * `name` - (string): Command name.
-///
-/// # Returns - (bool):
-/// Whether the engine command has callbacks registered.
-#[track_caller]
-#[allow(dead_code, non_snake_case)]
-pub fn HasConsoleCommandCallbacks(name: &Str) -> bool {
-    unsafe {
-        __s2sdk_HasConsoleCommandCallbacks
-            .expect("HasConsoleCommandCallbacks function was not found")(name)
-    }
-}
-pub type _HasConsoleCommandCallbacks = unsafe extern "C" fn(&Str) -> bool;
-#[allow(dead_code, non_upper_case_globals)]
-#[unsafe(no_mangle)]
-pub static mut __s2sdk_HasConsoleCommandCallbacks: Option<_HasConsoleCommandCallbacks> = None;
-
 /// Removes a console command from the system.
 ///
 /// # Arguments

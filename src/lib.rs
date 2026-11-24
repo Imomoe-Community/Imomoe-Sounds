@@ -95,7 +95,6 @@ fn require_bindings(precache: bool) -> Result<(), Box<dyn Error>> {
         __s2sdk_IsClientAlive,
         __s2sdk_AddConsoleCommand,
         __s2sdk_RemoveCommand,
-        __s2sdk_HasConsoleCommandCallbacks,
         __s2sdk_ReplyToCommand,
         __s2sdk_HookEvent,
         __s2sdk_UnhookEvent,
@@ -248,15 +247,13 @@ fn start() -> Result<(), Box<dyn Error>> {
                     plugify::warning!("imomoe_sounds: cannot observe {}: {:?}", event, result);
                 }
             }
-            let command = Str::from_str(SOUND_COMMAND);
-            let registered = !s2sdk::HasConsoleCommandCallbacks(&command)
-                && s2sdk::AddConsoleCommand(
-                    &command,
-                    &Str::from_str("Toggle extra announcements"),
-                    ConVarFlag::ClientCanExecute,
-                    on_sound_command,
-                    HookMode::Pre,
-                );
+            let registered = s2sdk::AddConsoleCommand(
+                &Str::from_str(SOUND_COMMAND),
+                &Str::from_str("Toggle extra announcements"),
+                ConVarFlag::ClientCanExecute,
+                on_sound_command,
+                HookMode::Pre,
+            );
             with_state(|state| state.sound_registered = registered);
             if !registered {
                 plugify::warning!(
