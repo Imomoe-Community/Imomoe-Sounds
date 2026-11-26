@@ -18,6 +18,8 @@ use plugify::{Arr, Str, register_plugin};
 use preferences::Preferences;
 use s2sdk::{CSTeam, ConCommandContext, ConVarFlag, EventHookError, HookMode, ResultType};
 use std::error::Error;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::sync::Mutex;
@@ -35,6 +37,8 @@ const EVENTS: &[&str] = &[
 ];
 const SOUND_COMMAND: &str = "sound";
 const EXCLUSIVE_CONVAR: &str = "imomoe_sounds_exclusive";
+const EXCLUSIVE_DEFAULT: bool = true;
+const CVAR_CONFIG: &str = "imomoe/imomoe_sounds.cfg";
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
 
@@ -46,6 +50,7 @@ struct State {
     warmup_combat: Combat,
     teammates_are_enemies: u64,
     exclusive_convar: u64,
+    cvar_map: Option<String>,
     live: bool,
     hooks: Vec<&'static str>,
     sound_registered: bool,
@@ -149,25 +154,85 @@ fn valid_convar(handle: u64) -> bool {
     handle != 0 && handle as u16 != u16::MAX
 }
 
-fn ensure_exclusive_convar() -> u64 {
-    let name = Str::from_str(EXCLUSIVE_CONVAR);
-    let existing = s2sdk::FindConVar(&name);
-    if valid_convar(existing) {
-        existing
-    } else {
-        s2sdk::CreateConVarBool(
-            &name,
-            true,
-            &Str::from_str(
-                "Play only the highest-priority kill cue per tick (1=exclusive, 0=stack dimensions)",
-            ),
-            ConVarFlag::None,
-            false,
-            false,
-            false,
-            false,
-        )
+fn create_exclusive_convar() -> u64 {
+    // S2SDK caches an invalid lookup, which would prevent creating the same name.
+    s2sdk::CreateConVarBool(
+        &Str::from_str(EXCLUSIVE_CONVAR),
+        EXCLUSIVE_DEFAULT,
+        &Str::from_str(
+            "Play only the highest-priority kill cue per tick (1=exclusive, 0=stack dimensions)",
+        ),
+        ConVarFlag::None,
+        false,
+        false,
+        false,
+        false,
+    )
+}
+
+fn ensure_cvar_config(directory: &Path) -> io::Result<()> {
+    seed_cvar_config(directory, |file| {
+        writeln!(file, "{EXCLUSIVE_CONVAR} {}", u8::from(EXCLUSIVE_DEFAULT))
+    })
+}
+
+fn seed_cvar_config(
+    directory: &Path,
+    write_defaults: impl FnOnce(&mut fs::File) -> io::Result<()>,
+) -> io::Result<()> {
+    let path = directory.join(CVAR_CONFIG);
+    fs::create_dir_all(directory.join("imomoe"))?;
+    match OpenOptions::new().write(true).create_new(true).open(&path) {
+        Ok(mut file) => {
+            let result = write_defaults(&mut file).and_then(|()| file.sync_all());
+            drop(file);
+            if result.is_err()
+                && let Err(cleanup) = fs::remove_file(&path)
+                && cleanup.kind() != io::ErrorKind::NotFound
+            {
+                plugify::warning!(
+                    "imomoe_sounds: cannot remove incomplete cfg/{}: {}",
+                    CVAR_CONFIG,
+                    cleanup
+                );
+            }
+            result
+        }
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists && path.is_file() => Ok(()),
+        Err(error) => Err(error),
     }
+}
+
+fn exec_cvar_config() {
+    let (Some(game_directory), Some(exec)) = (
+        unsafe { std::ptr::addr_of!(s2sdk::__s2sdk_GetGameDirectory).read() },
+        unsafe { std::ptr::addr_of!(s2sdk::__s2sdk_ServerCommandEx).read() },
+    ) else {
+        plugify::warning!(
+            "imomoe_sounds: ConVar CFG requires S2SDK GetGameDirectory and ServerCommandEx"
+        );
+        return;
+    };
+    let game_directory = unsafe { game_directory() };
+    let root = game_directory.as_str();
+    if root.is_empty() {
+        plugify::warning!("imomoe_sounds: cannot resolve game directory for ConVar CFG");
+        return;
+    }
+    let directory = Path::new(root).join("csgo").join("cfg");
+    if let Err(error) = ensure_cvar_config(&directory) {
+        plugify::warning!("imomoe_sounds: cannot load cfg/{}: {}", CVAR_CONFIG, error);
+        return;
+    }
+    let _ = unsafe { exec(&Str::from_str("exec imomoe/imomoe_sounds.cfg")) };
+    plugify::info!("imomoe_sounds: requested exec {}", CVAR_CONFIG);
+}
+
+fn current_cvar_map() -> Option<String> {
+    let get = unsafe { std::ptr::addr_of!(s2sdk::__s2sdk_GetCurrentMap).read() }?;
+    let map = unsafe { get() };
+    let name = map.as_str();
+    (!name.is_empty()).then(|| name.to_owned())
 }
 
 fn prepare_state() -> Result<State, Box<dyn Error>> {
@@ -199,7 +264,8 @@ fn prepare_state() -> Result<State, Box<dyn Error>> {
         combat: Combat::default(),
         warmup_combat: Combat::default(),
         teammates_are_enemies: s2sdk::FindConVar(&Str::from_str("mp_teammates_are_enemies")),
-        exclusive_convar: ensure_exclusive_convar(),
+        exclusive_convar: create_exclusive_convar(),
+        cvar_map: current_cvar_map(),
         live: false,
         hooks: Vec::new(),
         sound_registered: false,
@@ -226,6 +292,7 @@ fn start() -> Result<(), Box<dyn Error>> {
                 }
             };
             let precache = state.precache;
+            let exclusive_registered = valid_convar(state.exclusive_convar);
             *STATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
             if unsafe { std::ptr::addr_of!(s2sdk::__s2sdk_GetEventInt).read() }.is_none() {
                 plugify::warning!(
@@ -258,6 +325,19 @@ fn start() -> Result<(), Box<dyn Error>> {
             if !registered {
                 plugify::warning!(
                     "imomoe_sounds: !sound is already in use or could not be registered"
+                );
+            }
+            if exclusive_registered {
+                if unsafe { std::ptr::addr_of!(s2sdk::__s2sdk_GetCurrentMap).read() }.is_none() {
+                    plugify::warning!(
+                        "imomoe_sounds: ConVar CFG map reload requires S2SDK GetCurrentMap"
+                    );
+                }
+                exec_cvar_config();
+            } else {
+                plugify::warning!(
+                    "imomoe_sounds: cannot register {}; using the exclusive default",
+                    EXCLUSIVE_CONVAR
                 );
             }
             Ok(())
@@ -312,7 +392,19 @@ fn end() -> Result<(), Box<dyn Error>> {
 
 unsafe extern "C" fn on_map_start() {
     boundary("map start", (), || {
-        with_state(|state| state.live = true);
+        let map = current_cvar_map();
+        let reload = with_state(|state| {
+            state.live = true;
+            let Some(map) = map else { return false };
+            if state.cvar_map.as_ref() == Some(&map) {
+                return false;
+            }
+            // Startup covered the initial map and its Steam same-map reload.
+            state.cvar_map.replace(map).is_some() && valid_convar(state.exclusive_convar)
+        });
+        if reload == Some(true) {
+            exec_cvar_config();
+        }
     });
 }
 
@@ -409,7 +501,7 @@ unsafe extern "C" fn on_game_frame(_: bool, _: bool, _: bool) {
             let exclusive = if valid_convar(state.exclusive_convar) {
                 s2sdk::GetConVarBool(state.exclusive_convar)
             } else {
-                true
+                EXCLUSIVE_DEFAULT
             };
             (
                 formal.into_iter().chain(warmup).collect::<Vec<_>>(),
@@ -833,11 +925,48 @@ mod tests {
     use super::*;
     use std::sync::{
         Arc,
-        atomic::{AtomicI32, Ordering},
+        atomic::{AtomicBool, AtomicI32, Ordering},
     };
 
     static TEST_MUTEX: Mutex<()> = Mutex::new(());
     static EMISSIONS: Mutex<Vec<(String, Vec<i32>)>> = Mutex::new(Vec::new());
+
+    #[test]
+    fn cvar_cfg_seeds_defaults_once_and_leaves_operator_edits() {
+        let cfg = tempfile::tempdir().unwrap();
+        let path = cfg.path().join(CVAR_CONFIG);
+
+        ensure_cvar_config(cfg.path()).unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "imomoe_sounds_exclusive 1\n"
+        );
+
+        let operator_cfg = "// Keep my note\r\nimomoe_sounds_exclusive 0\r\n";
+        fs::write(&path, operator_cfg).unwrap();
+        ensure_cvar_config(cfg.path()).unwrap();
+
+        assert_eq!(fs::read(&path).unwrap(), operator_cfg.as_bytes());
+    }
+
+    #[test]
+    fn cvar_cfg_cleans_up_partial_write_and_can_retry() {
+        let cfg = tempfile::tempdir().unwrap();
+        let path = cfg.path().join(CVAR_CONFIG);
+        let error = seed_cvar_config(cfg.path(), |file| {
+            file.write_all(b"imomoe_sounds_exclusive ")?;
+            Err(io::Error::from(io::ErrorKind::StorageFull))
+        })
+        .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::StorageFull);
+        assert!(!path.exists());
+        ensure_cvar_config(cfg.path()).unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "imomoe_sounds_exclusive 1\n"
+        );
+    }
 
     unsafe extern "C" fn max_clients() -> i32 {
         5
@@ -909,6 +1038,7 @@ mod tests {
             warmup_combat: Combat::default(),
             teammates_are_enemies: 0,
             exclusive_convar: 0,
+            cvar_map: None,
             live: true,
             hooks: Vec::new(),
             sound_registered: false,
@@ -1026,6 +1156,7 @@ mod tests {
             warmup_combat: Combat::default(),
             teammates_are_enemies: 0,
             exclusive_convar: 0,
+            cvar_map: None,
             live: true,
             hooks: Vec::new(),
             sound_registered: false,
@@ -1119,6 +1250,8 @@ mod tests {
     #[test]
     fn death_restarts_only_the_victims_personal_rotation_after_its_last_kill_batch() {
         static TICK: AtomicI32 = AtomicI32::new(0);
+        static EXCLUSIVE: AtomicBool = AtomicBool::new(false);
+        const EXCLUSIVE_HANDLE: u64 = 42;
 
         unsafe extern "C" fn death_slot(event: usize, key: &Str) -> i32 {
             if key.as_str() == "attacker" {
@@ -1136,8 +1269,8 @@ mod tests {
         unsafe extern "C" fn no_game_rules() -> usize {
             0
         }
-        unsafe extern "C" fn false_convar(_: u64) -> bool {
-            false
+        unsafe extern "C" fn exclusive_convar(handle: u64) -> bool {
+            handle == EXCLUSIVE_HANDLE && EXCLUSIVE.load(Ordering::Relaxed)
         }
         unsafe extern "C" fn team(slot: i32) -> CSTeam {
             if slot % 2 == 0 { CSTeam::T } else { CSTeam::CT }
@@ -1166,9 +1299,9 @@ mod tests {
                     s2sdk::__s2sdk_GetGameRules = Some(no_game_rules);
                     s2sdk::__s2sdk_GetGameTickCount = Some(tick);
                     s2sdk::__s2sdk_GetGameTime = Some(time);
-                    s2sdk::__s2sdk_GetConVarBool = Some(false_convar);
+                    s2sdk::__s2sdk_GetConVarBool = Some(exclusive_convar);
                 }
-                with_state(|state| state.exclusive_convar = 1);
+                with_state(|state| state.exclusive_convar = EXCLUSIVE_HANDLE);
                 let fire = |tick, kills: &[(usize, usize)]| {
                     TICK.store(tick, Ordering::Relaxed);
                     for &(killer, victim) in kills {
@@ -1195,6 +1328,8 @@ mod tests {
                 // A is back in play; B did not die and the weapon playlist is global.
                 assert_eq!(fire(40, &[(A, 3)]), ["S1", "G5", "K1"]);
                 assert_eq!(fire(50, &[(B, 2)]), ["S3", "G6", "K3"]);
+                EXCLUSIVE.store(true, Ordering::Relaxed);
+                assert_eq!(fire(60, &[(A, 3)]), ["S2"]);
                 unsafe {
                     s2sdk::__s2sdk_GetEventPlayerSlot = None;
                     s2sdk::__s2sdk_GetEventBool = None;

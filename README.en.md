@@ -49,6 +49,8 @@
 
 4. Restart the server or reload the plugin to take effect.
 
+The plugin loads `game/csgo/cfg/imomoe/imomoe_sounds.cfg` at startup and when switching to a different map. Reloading the same map via `changelevel` does not run it again (unloading and reloading the plugin runs startup again). It generates `imomoe_sounds_exclusive 1` only when the file is missing. To apply edits now, run `exec imomoe/imomoe_sounds.cfg` from the server console. Trimmed S2SDK providers need `GetGameDirectory`, `ServerCommandEx` and `GetCurrentMap` for automatic loading.
+
 ---
 
 ### Configuration & Playback

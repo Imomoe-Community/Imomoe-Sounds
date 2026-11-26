@@ -11,6 +11,23 @@ use plugify::{Arr, Mat4x4, Str, Var, Vec2, Vec3, Vec4, scope};
 #[allow(unused_imports)]
 use std::sync::RwLock;
 
+/// Executes a server command right away as if it were on the server console (or RCON) and returns the printed text. Console commands and convars only: commands are split on ';' and new lines, aliases are not expanded.
+///
+/// # Arguments
+/// * `command` - (string): The command to execute on the server.
+///
+/// # Returns - (string):
+/// String to store command result into.
+#[track_caller]
+#[allow(dead_code, non_snake_case)]
+pub fn ServerCommandEx(command: &Str) -> Str {
+    unsafe { __s2sdk_ServerCommandEx.expect("ServerCommandEx function was not found")(command) }
+}
+pub type _ServerCommandEx = unsafe extern "C" fn(&Str) -> Str;
+#[allow(dead_code, non_upper_case_globals)]
+#[unsafe(no_mangle)]
+pub static mut __s2sdk_ServerCommandEx: Option<_ServerCommandEx> = None;
+
 /// Creates a console command or hooks an already existing one.
 ///
 /// # Arguments

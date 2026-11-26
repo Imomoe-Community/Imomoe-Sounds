@@ -51,6 +51,8 @@
 
 4. 重启服务端或按运维流程重新加载插件使其生效。<br><sub><sup>Restart or reload the plugin to apply changes.</sup></sub>
 
+`imomoe_sounds_exclusive` 单独保存在 `game/csgo/cfg/imomoe/imomoe_sounds.cfg`。插件启动和切换到另一张地图时加载该文件；同图 `changelevel` 地图重载不重复执行（插件卸载重加载会重新执行）。文件缺失时生成默认值 `1`，不覆盖已有内容。要立即应用修改，可在服务端控制台运行 `exec imomoe/imomoe_sounds.cfg`。裁剪版 S2SDK 需保留 `GetGameDirectory`、`ServerCommandEx` 和 `GetCurrentMap` 才能自动完成以上流程。<br><sub><sup>The plugin loads this CFG at startup and when switching to a different map. Reloading the same map does not run it again. It generates the default of `1` only when the file is missing. Use the server console command above to apply edits immediately. Trimmed S2SDK providers need `GetGameDirectory`, `ServerCommandEx` and `GetCurrentMap` for automatic loading.</sup></sub>
+
 ---
 
 ### 配置播放与收听 / Configuration & Playback

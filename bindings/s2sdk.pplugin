@@ -11,6 +11,46 @@
   "language": "cpp",
   "methods": [
     {
+      "name": "GetCurrentMap",
+      "group": "Engine",
+      "description": "Returns the current map name.",
+      "funcName": "GetCurrentMap",
+      "paramTypes": [],
+      "retType": {
+        "type": "string",
+        "description": "A reference to a string where the current map name will be stored."
+      }
+    },
+    {
+      "name": "GetGameDirectory",
+      "group": "Engine",
+      "description": "Returns the path of the game's directory.",
+      "funcName": "GetGameDirectory",
+      "paramTypes": [],
+      "retType": {
+        "type": "string",
+        "description": "A reference to a string where the game directory path will be stored."
+      }
+    },
+    {
+      "name": "ServerCommandEx",
+      "group": "Commands",
+      "description": "Executes a server command right away as if it were on the server console (or RCON) and returns the printed text. Console commands and convars only: commands are split on ';' and new lines, aliases are not expanded.",
+      "funcName": "ServerCommandEx",
+      "paramTypes": [
+        {
+          "name": "command",
+          "type": "string",
+          "ref": false,
+          "description": "The command to execute on the server."
+        }
+      ],
+      "retType": {
+        "type": "string",
+        "description": "String to store command result into."
+      }
+    },
+    {
       "name": "GetServerAddons",
       "group": "Addons",
       "description": "Retrieves the workshop addons that are mounted on the server and sent to all clients.",
