@@ -1,0 +1,320 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to draft (e.g. v0.2.0 or v0.2.0-rc.1)'
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RUSTUP_TOOLCHAIN: 1.99.1
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      base_version: ${{ steps.meta.outputs.base_version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: meta
+        name: Validate release tag and manifest versions
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"].strip()
+          match = re.fullmatch(r"v([0-9]+\.[0-9]+\.[0-9]+)(?:-([0-9A-Za-z.-]+))?", tag)
+          if not match:
+              raise SystemExit(
+                  f"Invalid release tag {tag!r}: expected vX.Y.Z or vX.Y.Z-<prerelease>"
+              )
+
+          base_version = match.group(1)
+          prerelease = "true" if match.group(2) else "false"
+          manifest = json.loads(Path("imomoe_sounds.pplugin").read_text(encoding="utf-8"))
+          pplugin_version = manifest.get("version")
+          cargo = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))
+          cargo_version = cargo.get("package", {}).get("version")
+
+          if pplugin_version != base_version:
+              raise SystemExit(
+                  f"Tag base version {base_version!r} does not match "
+                  f"imomoe_sounds.pplugin version {pplugin_version!r}"
+              )
+          if cargo_version != base_version:
+              raise SystemExit(
+                  f"Tag base version {base_version!r} does not match "
+                  f"Cargo.toml package version {cargo_version!r}"
+              )
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8", newline="\n") as out:
+              out.write(f"tag={tag}\n")
+              out.write(f"base_version={base_version}\n")
+              out.write(f"prerelease={prerelease}\n")
+          print(f"Prepared tag={tag} base_version={base_version} prerelease={prerelease}")
+          PY
+
+  build:
+    needs: prepare
+    name: Build and package (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            runner: windows-latest
+          - platform: linux-x64
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install pinned Rust toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-deps-${{ runner.os }}-${{ matrix.platform }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-deps-${{ runner.os }}-${{ matrix.platform }}-${{ env.RUSTUP_TOOLCHAIN }}-
+
+      - name: Check code formatting
+        if: matrix.platform == 'linux-x64'
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy lints
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Run unit tests
+        run: cargo test --locked
+
+      - name: Build and verify SteamRT runtime dependencies (Linux)
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='x86_64-unknown-linux-gnu'
+          image='registry.gitlab.steamos.cloud/steamrt/sniper/sdk@sha256:bb30053d3cd19d35c76ae69b2790dbaa1430448006f8240cb6d7e723f2d1940e'
+          cargo fetch --locked --target "$target"
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e CARGO_HOME=/cargo -e RUSTUP_HOME=/rustup -e PATH=/cargo/bin:/usr/bin:/bin \
+            -e CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/gcc-10 \
+            -v "${PWD}:/workspace" -v "${HOME}/.cargo:/cargo" -v "${HOME}/.rustup:/rustup" -w /workspace "$image" \
+            cargo "+${RUSTUP_TOOLCHAIN}" build --release --locked --offline --target "$target" --target-dir .work/steamrt-target
+          ldd_out="$(docker run --rm --network none -v "${PWD}:/workspace:ro" -w /workspace "$image" \
+            bash -lc "LC_ALL=C ldd -v .work/steamrt-target/${target}/release/libimomoe_sounds.so")"
+          printf '%s\n' "$ldd_out"
+          if grep -q "not found" <<< "$ldd_out"; then
+            echo "Unresolved Linux runtime dependency detected" >&2
+            exit 1
+          fi
+
+      - name: Build release binary (Windows)
+        if: matrix.platform == 'windows-x64'
+        run: cargo build --release --locked
+
+      - name: Package archive
+        shell: pwsh
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          BASE_VERSION: ${{ needs.prepare.outputs.base_version }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+
+          platform = os.environ["PLATFORM"]
+          base_version = os.environ["BASE_VERSION"]
+          windows = platform == "windows-x64"
+          magic = b"MZ" if windows else b"\x7fELF"
+          bin_name = "imomoe_sounds.dll" if windows else "libimomoe_sounds.so"
+          binary = Path("target/release" if windows else ".work/steamrt-target/x86_64-unknown-linux-gnu/release") / bin_name
+
+          plugify = "game/csgo/addons/plugify"
+          plugin = f"{plugify}/envs/imomoe_sounds"
+          cfg = f"{plugify}/configs/imomoe_sounds"
+          files = {
+              f"{plugin}/imomoe_sounds.pplugin": Path("imomoe_sounds.pplugin"),
+              f"{plugin}/bin/{bin_name}": binary,
+              f"{plugin}/LICENSE": Path("LICENSE"),
+              f"{cfg}/sounds.example.jsonc": Path("configs/imomoe_sounds/sounds.example.jsonc"),
+              f"{cfg}/sounds.workshop.example.jsonc": Path("configs/imomoe_sounds/sounds.workshop.example.jsonc"),
+              f"{cfg}/schemas/sounds.schema.json": Path("configs/imomoe_sounds/schemas/sounds.schema.json"),
+              "LICENSE": Path("LICENSE"),
+          }
+          for arcname, src in files.items():
+              if not src.is_file():
+                  raise FileNotFoundError(src)
+              if "/bin/" in arcname:
+                  with src.open("rb") as fh:
+                      if fh.read(len(magic)) != magic:
+                          raise ValueError(f"Binary does not match {platform}: {src}")
+
+          archive = Path(f"dist/imomoe-sounds-{base_version}-{platform}.zip")
+          archive.parent.mkdir(parents=True, exist_ok=True)
+          with ZipFile(archive, "w", compression=ZIP_DEFLATED) as zf:
+              for arcname, src in files.items():
+                  zf.write(src, arcname)
+          with ZipFile(archive) as zf:
+              if set(zf.namelist()) != files.keys() or zf.testzip() is not None:
+                  raise ValueError(f"Archive validation failed: {archive}")
+          print(f"Verified package: {archive}")
+          PY
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: release-imomoe-sounds-${{ matrix.platform }}
+          path: dist/imomoe-sounds-*-${{ matrix.platform }}.zip
+          if-no-files-found: error
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Verify archives and generate SHA256SUMS.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          zips=(release-assets/*.zip)
+          if (( ${#zips[@]} < 2 )); then
+            echo "Expected at least 2 release ZIPs, got ${#zips[@]}" >&2
+            ls -la release-assets >&2
+            exit 1
+          fi
+          (cd release-assets && LC_ALL=C sha256sum *.zip > SHA256SUMS.txt)
+          cat release-assets/SHA256SUMS.txt
+      - id: notes
+        name: Extract release notes from CHANGELOG.md
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          BASE_VERSION: ${{ needs.prepare.outputs.base_version }}
+          IS_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["TAG"]
+          base_version = os.environ["BASE_VERSION"]
+          is_pre = os.environ["IS_PRERELEASE"] == "true"
+          short_sha = os.environ["SHORT_SHA"][:7]
+
+          section_lines = None
+          changelog = Path("CHANGELOG.md")
+          if changelog.is_file():
+              heading_re = re.compile(rf"^##\s+\[{re.escape(base_version)}\](?:\s|$).*")
+              next_re = re.compile(r"^##\s+\[")
+              lines = changelog.read_text(encoding="utf-8").splitlines()
+              collecting = False
+              collected = []
+              for line in lines:
+                  if not collecting:
+                      if heading_re.match(line):
+                          collecting = True
+                  else:
+                      if next_re.match(line):
+                          break
+                      collected.append(line)
+              if collecting:
+                  while collected and (not collected[0].strip()):
+                      collected.pop(0)
+                  while collected and (not collected[-1].strip() or collected[-1].strip() == "---"):
+                      collected.pop()
+                  if collected:
+                      section_lines = collected
+
+          has_notes = section_lines is not None
+          if has_notes:
+              body = "\n".join(section_lines) + "\n"
+              if is_pre:
+                  banner = f"> **Pre-release / 预发布版本** — Automatically built from `{tag}` (`{short_sha}`).\n\n"
+                  body = banner + body
+              Path("release-notes.md").write_text(body, encoding="utf-8")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8", newline="\n") as out:
+              out.write(f"has_notes={'true' if has_notes else 'false'}\n")
+          print(f"Extracted CHANGELOG section for {base_version}: {has_notes}")
+          PY
+      - name: Create or replace Draft GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          IS_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          HAS_NOTES: ${{ steps.notes.outputs.has_notes }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tag = os.environ["TAG"]
+          raw = subprocess.check_output(
+              ["gh", "api", "--paginate", "--slurp", f"repos/{repo}/releases?per_page=100"],
+              text=True,
+          )
+          pages = json.loads(raw) if raw.strip() else []
+          releases = [item for page in pages for item in page] if pages and isinstance(pages[0], list) else pages
+          for rel in releases:
+              if rel.get("tag_name") == tag:
+                  if not rel.get("draft"):
+                      raise SystemExit(
+                          f"Published release already exists for {tag} (id={rel.get('id')}); refusing to overwrite"
+                      )
+                  subprocess.run(
+                      ["gh", "api", "-X", "DELETE", f"repos/{repo}/releases/{rel['id']}"],
+                      check=True,
+                  )
+                  print(f"Deleted existing draft release id={rel['id']} for {tag}")
+          PY
+
+          args=("$TAG" release-assets/* --draft --target "$GITHUB_SHA" --title "$TAG")
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          if [[ "$HAS_NOTES" == "true" ]]; then
+            args+=(--notes-file release-notes.md)
+          else
+            args+=(--generate-notes)
+          fi
+          gh release create "${args[@]}"
